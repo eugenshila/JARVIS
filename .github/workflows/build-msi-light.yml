@@ -1,0 +1,121 @@
+name: Build Windows MSI Light (Fast)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version"
+        required: false
+        default: "0.1.1"
+
+jobs:
+  build-light:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install WiX Toolset
+        run: |
+          choco install wixtoolset --no-progress -y
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install deps (lightweight)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller==6.10.0
+          python -m pip install -e .[server]
+          # Only core, no FAISS/ST/vLLM for fast build
+
+      - name: Build EXE (light)
+        run: |
+          python -m PyInstaller --onedir --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools
+          dir dist
+          dir dist/jarvis
+
+      - name: Create portable ZIP
+        run: |
+          Compress-Archive -Path dist/jarvis/* -DestinationPath dist/JARVIS-${{ github.ref_name }}-portable.zip -Force
+          if (-not (Test-Path dist/JARVIS-${{ github.ref_name }}-portable.zip)) {
+            Compress-Archive -Path dist/jarvis/* -DestinationPath dist/JARVIS-0.1.1-portable.zip -Force
+          }
+          dir dist
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $version) { $version = "0.1.1" }
+          Write-Host "Building MSI version $version"
+          # Simple MSI without heat (faster, avoids harvesting 1000s of files)
+          # Create minimal WXS that includes only exe
+          $wxs = @"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+            <Product Id="*" Name="JARVIS - Personal AI" Language="1033" Version="$version" Manufacturer="JARVIS" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS Local-first Personal AI" />
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+              <Feature Id="ProductFeature" Title="JARVIS" Level="1">
+                <ComponentRef Id="MainExecutable" />
+                <ComponentRef Id="PathEnv" />
+                <ComponentRef Id="StartMenuShortcut" />
+              </Feature>
+              <UIRef Id="WixUI_InstallDir" />
+              <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+              <Directory Id="TARGETDIR" Name="SourceDir">
+                <Directory Id="ProgramFiles64Folder">
+                  <Directory Id="INSTALLFOLDER" Name="JARVIS">
+                    <Component Id="MainExecutable" Guid="*">
+                      <File Id="JarvisExe" Source="dist\jarvis\jarvis.exe" KeyPath="yes" />
+                    </Component>
+                  </Directory>
+                </Directory>
+                <Directory Id="ProgramMenuFolder">
+                  <Directory Id="ApplicationProgramsFolder" Name="JARVIS">
+                    <Component Id="StartMenuShortcut" Guid="*">
+                      <Shortcut Id="AppShortcut" Name="JARVIS" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" />
+                      <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
+                      <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+                    </Component>
+                  </Directory>
+                </Directory>
+              </Directory>
+              <DirectoryRef Id="TARGETDIR">
+                <Component Id="PathEnv" Guid="*">
+                  <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+                  <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes" />
+                </Component>
+              </DirectoryRef>
+            </Product>
+          </Wix>
+          "@
+          $wxs | Out-File -FilePath "simple.wxs" -Encoding utf8
+          candle.exe simple.wxs -o simple.wixobj -arch x64
+          light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -ext WixUIExtension -cultures:en-us
+          dir dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-windows-light
+          path: |
+            dist/*.msi
+            dist/*.zip
+            dist/jarvis/jarvis.exe
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.msi
+            dist/*.zip
+          generate_release_notes: true
