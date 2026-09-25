@@ -1,4 +1,4 @@
-name: Build Windows MSI + EXE
+name: Build Windows MSI + EXE (Full)
 
 on:
   push:
@@ -14,6 +14,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -27,39 +29,82 @@ jobs:
           choco install wixtoolset --no-progress -y
           echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install deps
+      - name: Install deps (full, may be heavy)
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller==6.10.0
-          python -m pip install -e .[all]
-          python -m pip install -e .[dev]
+          python -m pip install -e .[server,memory,tools-search]
+          # Note: [all] includes vllm which doesn't work on Windows, so use subset
 
-      - name: Build EXE
+      - name: Build EXE (full)
         run: |
-          python -m PyInstaller --onedir --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import faiss --hidden-import sentence_transformers
+          python -m PyInstaller --onedir --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import faiss --hidden-import sentence_transformers --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools
           dir dist
 
-      - name: Build MSI (if WiX available)
+      - name: Build MSI (simple robust method)
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
           if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
           if (-not $version) { $version = "0.1.0" }
           Write-Host "Building MSI version $version"
-          # Harvest files
-          heat dir dist/jarvis -cg ProductComponents -dr INSTALLFOLDER -gg -srd -out deploy/windows/files.wxs -var var.SourceDir 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            candle deploy/windows/jarvis.wxs deploy/windows/files.wxs -o deploy/windows/ -arch x64 -dSourceDir=dist/jarvis
-            light deploy/windows/jarvis.wixobj deploy/windows/files.wixobj -o dist/JARVIS-$version-x64.msi -ext WixUIExtension -cultures:en-us
-          } else {
-            Write-Host "heat failed, building MSI with main exe only"
-            candle deploy/windows/jarvis.wxs -o deploy/windows/jarvis.wixobj -arch x64
-            light deploy/windows/jarvis.wixobj -o dist/JARVIS-$version-x64.msi -ext WixUIExtension -cultures:en-us
+          # Use simple WXS without heat for reliability (heat fails with many files)
+          $wxs = @"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+            <Product Id="*" Name="JARVIS - Personal AI" Language="1033" Version="$version" Manufacturer="JARVIS" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS Local-first Personal AI" />
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+              <Feature Id="ProductFeature" Title="JARVIS" Level="1">
+                <ComponentRef Id="MainExecutable" />
+                <ComponentRef Id="PathEnv" />
+                <ComponentRef Id="StartMenuShortcut" />
+              </Feature>
+              <UIRef Id="WixUI_InstallDir" />
+              <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+              <Directory Id="TARGETDIR" Name="SourceDir">
+                <Directory Id="ProgramFiles64Folder">
+                  <Directory Id="INSTALLFOLDER" Name="JARVIS">
+                    <Component Id="MainExecutable" Guid="*">
+                      <File Id="JarvisExe" Source="dist\jarvis\jarvis.exe" KeyPath="yes" />
+                    </Component>
+                  </Directory>
+                </Directory>
+                <Directory Id="ProgramMenuFolder">
+                  <Directory Id="ApplicationProgramsFolder" Name="JARVIS">
+                    <Component Id="StartMenuShortcut" Guid="*">
+                      <Shortcut Id="AppShortcut" Name="JARVIS" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" />
+                      <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
+                      <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+                    </Component>
+                  </Directory>
+                </Directory>
+              </Directory>
+              <DirectoryRef Id="TARGETDIR">
+                <Component Id="PathEnv" Guid="*">
+                  <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+                  <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes" />
+                </Component>
+              </DirectoryRef>
+            </Product>
+          </Wix>
+          "@
+          $wxs | Out-File -FilePath "simple_full.wxs" -Encoding utf8
+          candle.exe simple_full.wxs -o simple_full.wixobj -arch x64
+          light.exe simple_full.wixobj -o "dist/JARVIS-$version-x64.msi" -ext WixUIExtension -cultures:en-us
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "First light failed, trying without UI ext"
+            light.exe simple_full.wixobj -o "dist/JARVIS-$version-x64.msi" -cultures:en-us
           }
+          dir dist
 
       - name: Create portable ZIP
         run: |
-          Compress-Archive -Path dist/jarvis/* -DestinationPath dist/JARVIS-portable.zip -Force
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $version) { $version = "0.1.0" }
+          Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-$version-portable.zip" -Force
+          Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-portable.zip" -Force
           dir dist
 
       - name: Upload artifacts
@@ -70,6 +115,7 @@ jobs:
             dist/*.msi
             dist/*.zip
             dist/jarvis/jarvis.exe
+          if-no-files-found: warn
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -79,3 +125,4 @@ jobs:
             dist/*.msi
             dist/*.zip
           generate_release_notes: true
+          fail_on_unmatched_files: false

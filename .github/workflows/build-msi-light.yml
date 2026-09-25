@@ -9,11 +9,13 @@ on:
       version:
         description: "Version"
         required: false
-        default: "0.1.1"
+        default: "0.1.2"
 
 jobs:
   build-light:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -42,20 +44,18 @@ jobs:
 
       - name: Create portable ZIP
         run: |
-          Compress-Archive -Path dist/jarvis/* -DestinationPath dist/JARVIS-${{ github.ref_name }}-portable.zip -Force
-          if (-not (Test-Path dist/JARVIS-${{ github.ref_name }}-portable.zip)) {
-            Compress-Archive -Path dist/jarvis/* -DestinationPath dist/JARVIS-0.1.1-portable.zip -Force
-          }
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $version) { $version = "0.1.2" }
+          Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-$version-portable.zip" -Force
+          Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-portable.zip" -Force
           dir dist
 
-      - name: Build MSI
+      - name: Build MSI (simple, robust)
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.1" }
+          if (-not $version) { $version = "0.1.2" }
           Write-Host "Building MSI version $version"
-          # Simple MSI without heat (faster, avoids harvesting 1000s of files)
-          # Create minimal WXS that includes only exe
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
@@ -99,8 +99,15 @@ jobs:
           "@
           $wxs | Out-File -FilePath "simple.wxs" -Encoding utf8
           candle.exe simple.wxs -o simple.wixobj -arch x64
+          if ($LASTEXITCODE -ne 0) { Write-Host "candle failed"; exit 1 }
           light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -ext WixUIExtension -cultures:en-us
+          if ($LASTEXITCODE -ne 0) { Write-Host "light failed, trying without UI"; light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -cultures:en-us }
           dir dist
+          if (-not (Test-Path "dist/JARVIS-$version-x64.msi")) {
+            Write-Host "MSI not found, listing dist"
+            dir dist
+            exit 1
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -110,8 +117,9 @@ jobs:
             dist/*.msi
             dist/*.zip
             dist/jarvis/jarvis.exe
+          if-no-files-found: warn
 
-      - name: Release
+      - name: Release (allow update)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
@@ -119,3 +127,4 @@ jobs:
             dist/*.msi
             dist/*.zip
           generate_release_notes: true
+          fail_on_unmatched_files: false
