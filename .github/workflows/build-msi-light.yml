@@ -9,7 +9,7 @@ on:
       version:
         description: "Version"
         required: false
-        default: "0.1.3"
+        default: "0.1.4"
 
 jobs:
   build-light:
@@ -35,39 +35,71 @@ jobs:
           python -m pip install pyinstaller==6.10.0
           python -m pip install -e .[server]
 
-      - name: Build EXE (onefile for MSI - single file, no DLLs needed)
+      - name: Build EXE (onefile for MSI)
         run: |
-          python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools
+          # Onefile for MSI - single exe, no DLLs
+          python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher
           dir dist
-          # Also build onedir for portable ZIP (faster startup)
-          python -m PyInstaller --onedir --name jarvis-portable --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --noconfirm
+          # Also build portable onedir for faster startup
+          python -m PyInstaller --onedir --name jarvis-portable --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --noconfirm
+          dir dist
+          # Copy batch launchers
+          copy deploy\windows\*.bat dist\ 2>nul || echo "No bat files"
+          copy deploy\windows\*.bat dist\jarvis-portable\ 2>nul || echo "No bat for portable"
           dir dist
 
       - name: Create portable ZIP
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.3" }
+          if (-not $version) { $version = "0.1.4" }
           Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-$version-portable.zip" -Force
           Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-portable.zip" -Force
           dir dist
 
-      - name: Build MSI (onefile exe - single file, works)
+      - name: Build MSI (with proper shortcuts that stay open)
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.3" }
-          Write-Host "Building MSI version $version with onefile exe"
+          if (-not $version) { $version = "0.1.4" }
+          Write-Host "Building MSI v$version with GUI shortcuts"
+          
+          # Create batch files that will be included in MSI
+          $chatBat = @'
+          @echo off
+          echo ============================================================
+          echo JARVIS - Personal AI, On Personal Devices
+          echo ============================================================
+          echo.
+          echo Type /exit to quit chat, or close window
+          echo.
+          "%~dp0jarvis.exe" chat
+          echo.
+          echo Chat ended. Press any key to close...
+          pause >nul
+          '@
+          
+          $doctorBat = @'
+          @echo off
+          "%~dp0jarvis.exe" doctor
+          echo.
+          pause
+          '@
+          
+          $chatBat | Out-File -FilePath "dist\JARVIS-Chat.bat" -Encoding ascii
+          $doctorBat | Out-File -FilePath "dist\JARVIS-Doctor.bat" -Encoding ascii
+          
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
             <Product Id="*" Name="JARVIS - Personal AI" Language="1033" Version="$version" Manufacturer="JARVIS" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS Local-first Personal AI" />
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS Local-first Personal AI - Use PowerShell: jarvis chat" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
               <MediaTemplate EmbedCab="yes" />
               <Feature Id="ProductFeature" Title="JARVIS" Level="1">
                 <ComponentRef Id="MainExecutable" />
+                <ComponentRef Id="BatchFiles" />
                 <ComponentRef Id="PathEnv" />
-                <ComponentRef Id="StartMenuShortcut" />
+                <ComponentRef Id="StartMenuShortcuts" />
               </Feature>
               <UIRef Id="WixUI_InstallDir" />
               <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
@@ -77,13 +109,18 @@ jobs:
                     <Component Id="MainExecutable" Guid="*">
                       <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
                     </Component>
+                    <Component Id="BatchFiles" Guid="*">
+                      <File Id="ChatBat" Source="dist\JARVIS-Chat.bat" />
+                      <File Id="DoctorBat" Source="dist\JARVIS-Doctor.bat" />
+                    </Component>
                   </Directory>
                 </Directory>
                 <Directory Id="ProgramMenuFolder">
                   <Directory Id="ApplicationProgramsFolder" Name="JARVIS">
-                    <Component Id="StartMenuShortcut" Guid="*">
-                      <Shortcut Id="AppShortcut" Name="JARVIS" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" />
-                      <Shortcut Id="AppShortcut2" Name="JARVIS Doctor" Target="[INSTALLFOLDER]jarvis.exe" Arguments="doctor" WorkingDirectory="INSTALLFOLDER" />
+                    <Component Id="StartMenuShortcuts" Guid="*">
+                      <Shortcut Id="ChatShortcut" Name="JARVIS Chat" Description="Start JARVIS chat (stays open)" Target="[System64Folder]cmd.exe" Arguments="/k &quot;[INSTALLFOLDER]JARVIS-Chat.bat&quot;" WorkingDirectory="INSTALLFOLDER" Icon="JarvisExe" />
+                      <Shortcut Id="DoctorShortcut" Name="JARVIS Doctor" Description="Check system health" Target="[System64Folder]cmd.exe" Arguments="/k &quot;[INSTALLFOLDER]JARVIS-Doctor.bat&quot;" WorkingDirectory="INSTALLFOLDER" Icon="JarvisExe" />
+                      <Shortcut Id="PowerShellShortcut" Name="JARVIS PowerShell" Description="Open PowerShell with JARVIS" Target="[System64Folder]WindowsPowerShell\v1.0\powershell.exe" Arguments="-NoExit -Command &quot;Write-Host 'JARVIS ready! Try: jarvis doctor, jarvis chat, jarvis ask --mock' -ForegroundColor Green; Write-Host 'Docs: https://github.com/eugenshila/JARVIS' -ForegroundColor Cyan&quot;" WorkingDirectory="INSTALLFOLDER" />
                       <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
                       <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
                     </Component>
@@ -108,12 +145,7 @@ jobs:
             light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -cultures:en-us
           }
           dir dist
-          if (-not (Test-Path "dist/JARVIS-$version-x64.msi")) {
-            Write-Host "MSI not found!"
-            dir dist
-            exit 1
-          }
-          Write-Host "MSI built: dist/JARVIS-$version-x64.msi - $((Get-Item "dist/JARVIS-$version-x64.msi").Length / 1MB) MB"
+          Write-Host "MSI built: $((Get-Item "dist/JARVIS-$version-x64.msi").Length / 1MB) MB - Single file, will stay open via shortcuts"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -123,7 +155,7 @@ jobs:
             dist/*.msi
             dist/*.zip
             dist/jarvis.exe
-            dist/jarvis-portable/jarvis-portable.exe
+            dist/*.bat
           if-no-files-found: warn
 
       - name: Release
