@@ -1,0 +1,81 @@
+name: Build Windows MSI + EXE
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g., 0.1.0)"
+        required: false
+        default: "0.1.0"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install WiX Toolset
+        run: |
+          choco install wixtoolset --no-progress -y
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller==6.10.0
+          python -m pip install -e .[all]
+          python -m pip install -e .[dev]
+
+      - name: Build EXE
+        run: |
+          python -m PyInstaller --onedir --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import faiss --hidden-import sentence_transformers
+          dir dist
+
+      - name: Build MSI (if WiX available)
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
+          if (-not $version) { $version = "0.1.0" }
+          Write-Host "Building MSI version $version"
+          # Harvest files
+          heat dir dist/jarvis -cg ProductComponents -dr INSTALLFOLDER -gg -srd -out deploy/windows/files.wxs -var var.SourceDir 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            candle deploy/windows/jarvis.wxs deploy/windows/files.wxs -o deploy/windows/ -arch x64 -dSourceDir=dist/jarvis
+            light deploy/windows/jarvis.wixobj deploy/windows/files.wixobj -o dist/JARVIS-$version-x64.msi -ext WixUIExtension -cultures:en-us
+          } else {
+            Write-Host "heat failed, building MSI with main exe only"
+            candle deploy/windows/jarvis.wxs -o deploy/windows/jarvis.wixobj -arch x64
+            light deploy/windows/jarvis.wixobj -o dist/JARVIS-$version-x64.msi -ext WixUIExtension -cultures:en-us
+          }
+
+      - name: Create portable ZIP
+        run: |
+          Compress-Archive -Path dist/jarvis/* -DestinationPath dist/JARVIS-portable.zip -Force
+          dir dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-windows
+          path: |
+            dist/*.msi
+            dist/*.zip
+            dist/jarvis/jarvis.exe
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.msi
+            dist/*.zip
+          generate_release_notes: true

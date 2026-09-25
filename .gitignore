@@ -2,3 +2,13 @@ __pycache__/
 *.py[cod]
 .env
 .venv/
+dist/
+build/
+*.egg-info/
+node_modules/
+frontend/dist/
+.jaris/
+.memory/
+.telemetry/
+.DS_Store
+*.log

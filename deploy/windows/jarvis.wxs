@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <!-- JARVIS MSI Installer — WiX Toolset v3.11 -->
+  <!-- Requires: WiX Toolset 3.11 from https://wixtoolset.org/releases/ -->
+
+  <Product Id="*" 
+           Name="JARVIS - Personal AI, On Personal Devices" 
+           Language="1033" 
+           Version="0.0.0" 
+           Manufacturer="JARVIS Contributors" 
+           UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS — Local-first Personal AI" Comments="Apache 2.0 License" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" Title="JARVIS" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="PathEnv" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <!-- UI -->
+    <UIRef Id="WixUI_InstallDir" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="deploy/windows/license.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="deploy/windows/banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="deploy/windows/dialog.bmp" />
+
+    <!-- Directories -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="JARVIS">
+          <!-- Files will be added by heat.exe or manually -->
+          <Directory Id="BIN" Name="bin" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="JARVIS"/>
+      </Directory>
+    </Directory>
+
+    <!-- Components -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <!-- Main executable - built by PyInstaller -->
+      <Component Id="MainExecutable" Guid="*">
+        <File Id="JarvisExe" Source="dist/jarvis/jarvis.exe" KeyPath="yes" />
+      </Component>
+      <!-- Config example -->
+      <Component Id="ConfigExample" Guid="*">
+        <File Id="ConfigToml" Source="configs/jarvis/config.example.toml" />
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="BIN">
+      <!-- Additional binaries if onedir mode -->
+    </DirectoryRef>
+
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="ApplicationStartMenuShortcut" 
+                  Name="JARVIS"
+                  Description="Personal AI, On Personal Devices"
+                  Target="[INSTALLFOLDER]jarvis.exe"
+                  WorkingDirectory="INSTALLFOLDER"/>
+        <Shortcut Id="UninstallProduct" 
+                  Name="Uninstall JARVIS"
+                  Description="Uninstall JARVIS"
+                  Target="[System64Folder]msiexec.exe"
+                  Arguments="/x [ProductCode]"/>
+        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <!-- Environment PATH -->
+    <DirectoryRef Id="TARGETDIR">
+      <Component Id="PathEnv" Guid="*">
+        <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <!-- All other files from PyInstaller dist -->
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <!-- This will be populated by heat.exe: 
+           heat dir dist/jarvis -cg ProductComponents -dr INSTALLFOLDER -gg -srd -out deploy/windows/files.wxs
+           For now, main exe is included manually above. 
+           In build script, we harvest automatically.
+      -->
+    </ComponentGroup>
+
+  </Product>
+</Wix>
