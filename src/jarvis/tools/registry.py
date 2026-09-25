@@ -1,4 +1,4 @@
-"""Tool registry — now with hybrid search, FAISS memory, Tavily, DDGS."""
+"""Tool registry — now with hybrid search, FAISS memory, Tavily, DDGS, Iron Man devices."""
 
 from __future__ import annotations
 
@@ -24,6 +24,12 @@ except ImportError:
     TavilySearchTool = WebSearchTool  # type: ignore
     DDGSearchTool = WebSearchTool  # type: ignore
 
+try:
+    from jarvis.tools.device_tools import LightsTool, MusicTool, ProjectTool, SystemTool
+    HAS_DEVICE_TOOLS = True
+except ImportError:
+    HAS_DEVICE_TOOLS = False
+
 
 REGISTRY: dict[str, type[BaseTool]] = {
     "file_read": FileReadTool,
@@ -38,6 +44,14 @@ REGISTRY: dict[str, type[BaseTool]] = {
     "calendar": CalendarTool,
     "gmail": GmailTool,
 }
+
+if HAS_DEVICE_TOOLS:
+    REGISTRY.update({
+        "lights": LightsTool,
+        "music": MusicTool,
+        "system": SystemTool,
+        "project": ProjectTool,
+    })
 
 
 def get_tool(name: str) -> BaseTool | None:

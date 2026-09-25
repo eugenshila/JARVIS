@@ -390,7 +390,6 @@ def research(prompt: str, agent: str):
 def scan(path: str | None):
     """Scan for data boundary issues (privacy check)."""
     console.print("[bold]Data Boundary Scan[/]")
-    # Simple mock audit
     checks = [
         ("Config exposes API key on disk", False),
         ("Memory contains PII", False),
@@ -405,6 +404,83 @@ def scan(path: str | None):
     console.print(table)
     console.print("[green]Scan complete — no critical issues (mock audit).[/]")
     console.print("[dim]For full audit, see OpenJarvis security docs.[/]")
+
+
+@cli.command()
+@click.option("--engine", "-e", default=None, help="Engine: openai, ollama, mock, vllm, mlx, litellm")
+@click.option("--voice", is_flag=True, help="Enable voice I/O (STT+TTS)")
+@click.option("--wake-word", default="jarvis", help="Wake word for voice mode")
+def ironman(engine: str | None, voice: bool, wake_word: str):
+    """Interactive AI like Iron Man's JARVIS — witty, voice-ready, device control."""
+    from jarvis.agents.registry import get_agent
+    from jarvis.core.types import EngineType
+
+    cfg = JarvisConfig.load()
+    if engine:
+        try:
+            cfg.engine.type = EngineType(engine)
+        except ValueError:
+            pass
+
+    console.print(Panel.fit(
+        f"[bold green]JARVIS Iron Man Mode[/]\n"
+        f"Personal AI, On Personal Devices\n"
+        f"Engine: {cfg.engine.type.value} | Model: {cfg.engine.model}\n"
+        f"Voice: {'Enabled' if voice else 'Text only (use --voice for STT/TTS)'}\n"
+        f"Wake word: {wake_word}\n\n"
+        f"Try: 'Good morning JARVIS', 'Turn off the lights', 'What should I work on today?', 'I am Iron Man'",
+        border_style="green"
+    ))
+
+    ag = get_agent("ironman", config=cfg)
+
+    if voice:
+        try:
+            from jarvis.speech.voice_io import interactive_voice_loop
+            interactive_voice_loop(ag, wake_word=wake_word, tts=True)
+            return
+        except ImportError as e:
+            console.print(f"[yellow]Voice deps missing: {e}. Falling back to text. Install with: pip install -e .[voice][/]")
+        except Exception as e:
+            console.print(f"[red]Voice mode failed: {e}. Falling back to text.[/]")
+
+    # Text interactive loop with Iron Man personality
+    try:
+        greeting = ag.get_greeting()
+    except Exception:
+        greeting = "Good evening, Sir. JARVIS online."
+
+    console.print(Panel(greeting, title="JARVIS", border_style="blue"))
+
+    while True:
+        try:
+            user_input = console.input("[bold green]You:[/] ")
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[dim]Shutting down, Sir. Always a pleasure.[/]")
+            break
+
+        if not user_input.strip():
+            continue
+        if user_input.strip().lower() in ("/exit", "/quit", "exit", "quit", "goodbye", "shutdown"):
+            console.print(Panel("Shutting down, Sir. Always a pleasure.", title="JARVIS", border_style="green"))
+            break
+
+        try:
+            resp = ag.run(user_input, context="")
+            console.print(Panel(Markdown(resp.content), title="JARVIS", border_style="blue"))
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/]")
+
+
+@cli.command()
+@click.option("--engine", "-e", default=None, help="Engine type")
+def voice(engine: str | None):
+    """Voice chat mode — STT + TTS + Iron Man personality."""
+    from jarvis.cli.main import ironman
+    # Delegate to ironman with voice enabled
+    import click
+    ctx = click.get_current_context()
+    ctx.invoke(ironman, engine=engine, voice=True, wake_word="jarvis")
 
 
 if __name__ == "__main__":

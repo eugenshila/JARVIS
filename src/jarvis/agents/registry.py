@@ -1,4 +1,4 @@
-"""Agent registry."""
+"""Agent registry — now with Iron Man JARVIS."""
 
 from jarvis.agents.base import BaseAgent
 from jarvis.agents.code_assistant import CodeAssistantAgent
@@ -8,6 +8,12 @@ from jarvis.agents.orchestrator import OrchestratorAgent
 from jarvis.agents.react import ReActAgent
 from jarvis.agents.simple import SimpleAgent
 from jarvis.core.config import JarvisConfig
+
+try:
+    from jarvis.agents.ironman import IronManAgent
+    HAS_IRONMAN = True
+except ImportError:
+    HAS_IRONMAN = False
 
 REGISTRY: dict[str, type[BaseAgent]] = {
     "simple": SimpleAgent,
@@ -19,6 +25,13 @@ REGISTRY: dict[str, type[BaseAgent]] = {
     "code_assistant": CodeAssistantAgent,
     "code": CodeAssistantAgent,
 }
+
+if HAS_IRONMAN:
+    REGISTRY.update({
+        "ironman": IronManAgent,
+        "jarvis": IronManAgent,
+        "iron_man": IronManAgent,
+    })
 
 
 def get_agent(name: str, config: JarvisConfig | None = None) -> BaseAgent:
