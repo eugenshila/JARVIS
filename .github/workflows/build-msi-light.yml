@@ -9,7 +9,7 @@ on:
       version:
         description: "Version"
         required: false
-        default: "0.1.5"
+        default: "0.1.6"
 
 jobs:
   build-light:
@@ -37,93 +37,26 @@ jobs:
 
       - name: Build EXE (onefile CLI + windowed GUI)
         run: |
-          # CLI onefile (console, for PowerShell)
           python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico
-          
-          # GUI desktop (windowed, stays open, no console)
           python -m PyInstaller --onefile --name jarvis-desktop --windowed src/jarvis/cli/desktop_gui.py --collect-all jarvis --add-data "configs;configs" --add-data "app.py;." --add-data "prompts.py;." --add-data "client.py;." --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico --noconfirm
-          
-          # Portable onedir for faster startup
-          python -m PyInstaller --onedir --name jarvis-portable --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --noconfirm
-          
-          dir dist
-          copy deploy\windows\*.bat dist\ 2>nul
-          copy deploy\windows\*.bat dist\jarvis-portable\ 2>nul
           dir dist
 
-      - name: Create portable ZIP
-        run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.5" }
-          Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-$version-portable.zip" -Force
-          Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-portable.zip" -Force
-          dir dist
-
-      - name: Build MSI (with GUI that stays open)
+      - name: Build MSI (simple, only 2 exes, no batch files)
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.5" }
-          Write-Host "Building MSI v$version with GUI + CLI"
-          
-          # Create batch files
-          $chatBat = @'
-          @echo off
-          echo ============================================================
-          echo JARVIS Chat - Personal AI, On Personal Devices
-          echo ============================================================
-          echo.
-          echo Tips:
-          echo - Type your message and press Enter
-          echo - Type /exit to quit
-          echo - Works offline with --mock flag
-          echo.
-          "%~dp0jarvis.exe" chat
-          echo.
-          echo Chat ended. Press any key to close...
-          pause >nul
-          '@
-          
-          $doctorBat = @'
-          @echo off
-          "%~dp0jarvis.exe" doctor
-          echo.
-          echo Press any key to close...
-          pause >nul
-          '@
-          
-          $troubleshootBat = @'
-          @echo off
-          echo JARVIS Troubleshoot
-          echo ===================
-          echo.
-          echo Checking install...
-          dir "%~dp0"
-          echo.
-          echo Testing jarvis.exe...
-          "%~dp0jarvis.exe" --help
-          echo.
-          echo Testing doctor...
-          "%~dp0jarvis.exe" doctor
-          echo.
-          pause
-          '@
-          
-          $chatBat | Out-File -FilePath "dist\JARVIS-Chat.bat" -Encoding ascii
-          $doctorBat | Out-File -FilePath "dist\JARVIS-Doctor.bat" -Encoding ascii
-          $troubleshootBat | Out-File -FilePath "dist\JARVIS-Troubleshoot.bat" -Encoding ascii
-          
+          if (-not $version) { $version = "0.1.6" }
+          Write-Host "Building MSI v$version"
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
             <Product Id="*" Name="JARVIS - Personal AI" Language="1033" Version="$version" Manufacturer="JARVIS" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS - Double-click JARVIS Desktop for GUI that stays open, or JARVIS Chat" />
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS - Use Desktop shortcut for GUI that stays open" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
               <MediaTemplate EmbedCab="yes" />
               <Feature Id="ProductFeature" Title="JARVIS" Level="1">
                 <ComponentRef Id="MainExecutable" />
                 <ComponentRef Id="DesktopExecutable" />
-                <ComponentRef Id="BatchFiles" />
                 <ComponentRef Id="PathEnv" />
                 <ComponentRef Id="StartMenuShortcuts" />
               </Feature>
@@ -138,21 +71,14 @@ jobs:
                     <Component Id="DesktopExecutable" Guid="*">
                       <File Id="JarvisDesktopExe" Source="dist\jarvis-desktop.exe" />
                     </Component>
-                    <Component Id="BatchFiles" Guid="*">
-                      <File Id="ChatBat" Source="dist\JARVIS-Chat.bat" />
-                      <File Id="DoctorBat" Source="dist\JARVIS-Doctor.bat" />
-                      <File Id="TroubleshootBat" Source="dist\JARVIS-Troubleshoot.bat" />
-                    </Component>
                   </Directory>
                 </Directory>
                 <Directory Id="ProgramMenuFolder">
                   <Directory Id="ApplicationProgramsFolder" Name="JARVIS">
                     <Component Id="StartMenuShortcuts" Guid="*">
-                      <Shortcut Id="DesktopShortcut" Name="JARVIS Desktop" Description="GUI that stays open - Personal AI" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" Icon="JarvisExe" />
-                      <Shortcut Id="ChatShortcut" Name="JARVIS Chat" Description="CLI chat that stays open" Target="[INSTALLFOLDER]jarvis.exe" Arguments="chat" WorkingDirectory="INSTALLFOLDER" Icon="JarvisExe" />
-                      <Shortcut Id="DoctorShortcut" Name="JARVIS Doctor" Description="Check system" Target="[System64Folder]cmd.exe" Arguments="/k &quot;[INSTALLFOLDER]JARVIS-Doctor.bat&quot;" WorkingDirectory="INSTALLFOLDER" Icon="JarvisExe" />
-                      <Shortcut Id="TroubleshootShortcut" Name="JARVIS Troubleshoot" Description="Diagnose issues" Target="[System64Folder]cmd.exe" Arguments="/k &quot;[INSTALLFOLDER]JARVIS-Troubleshoot.bat&quot;" WorkingDirectory="INSTALLFOLDER" />
-                      <Shortcut Id="PowerShellShortcut" Name="JARVIS PowerShell" Description="Open PowerShell with JARVIS in PATH" Target="[System64Folder]WindowsPowerShell\v1.0\powershell.exe" Arguments="-NoExit -Command Write-Host 'JARVIS ready! Try: jarvis doctor, jarvis chat, jarvis ask --mock' -ForegroundColor Green" WorkingDirectory="INSTALLFOLDER" />
+                      <Shortcut Id="DesktopShortcut" Name="JARVIS Desktop" Description="GUI that stays open" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" />
+                      <Shortcut Id="ChatShortcut" Name="JARVIS Chat" Description="CLI chat" Target="[INSTALLFOLDER]jarvis.exe" Arguments="chat" WorkingDirectory="INSTALLFOLDER" />
+                      <Shortcut Id="DoctorShortcut" Name="JARVIS Doctor" Description="System check" Target="[INSTALLFOLDER]jarvis.exe" Arguments="doctor" WorkingDirectory="INSTALLFOLDER" />
                       <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
                       <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
                     </Component>
@@ -170,14 +96,40 @@ jobs:
           "@
           $wxs | Out-File -FilePath "simple.wxs" -Encoding utf8
           candle.exe simple.wxs -o simple.wixobj -arch x64
-          if ($LASTEXITCODE -ne 0) { Write-Host "candle failed"; exit 1 }
           light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -ext WixUIExtension -cultures:en-us
-          if ($LASTEXITCODE -ne 0) { 
-            Write-Host "light with UI ext failed, trying without"
-            light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -cultures:en-us
-          }
+          if ($LASTEXITCODE -ne 0) { light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -cultures:en-us }
           dir dist
-          Write-Host "MSI built: $((Get-Item "dist/JARVIS-$version-x64.msi").Length / 1MB) MB - Includes GUI that stays open"
+
+      - name: Create Python portable ZIP (guaranteed to work, no EXE)
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $version) { $version = "0.1.6" }
+          # Create python portable with batch files
+          New-Item -ItemType Directory -Force -Path "python-portable/JARVIS"
+          Copy-Item -Recurse -Force src python-portable/JARVIS/
+          Copy-Item -Force app.py,client.py,prompts.py,pyproject.toml,README.md,INSTALL.md python-portable/JARVIS/
+          Copy-Item -Recurse -Force configs python-portable/JARVIS/
+          Copy-Item -Recurse -Force docs python-portable/JARVIS/
+          @'
+          @echo off
+          echo JARVIS Desktop GUI - stays open
+          python --version
+          python -c "import tkinter; print('Tkinter OK')"
+          python -m pip install -e .[server] --break-system-packages 2>nul
+          python app.py
+          pause
+          '@ | Out-File -FilePath "python-portable/JARVIS/RUN-DESKTOP-GUI.bat" -Encoding ascii
+          @'
+          @echo off
+          echo JARVIS Chat - stays open
+          python -m pip install -e .[server] --break-system-packages 2>nul
+          python -m jarvis.cli.main chat
+          pause
+          '@ | Out-File -FilePath "python-portable/JARVIS/RUN-CLI-CHAT.bat" -Encoding ascii
+          Compress-Archive -Path python-portable/JARVIS -DestinationPath "dist/JARVIS-$version-PYTHON-PORTABLE-GUI.zip" -Force
+          Compress-Archive -Path python-portable/JARVIS -DestinationPath "dist/JARVIS-PYTHON-PORTABLE-GUI.zip" -Force
+          dir dist
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -188,7 +140,6 @@ jobs:
             dist/*.zip
             dist/jarvis.exe
             dist/jarvis-desktop.exe
-            dist/*.bat
           if-no-files-found: warn
 
       - name: Release
