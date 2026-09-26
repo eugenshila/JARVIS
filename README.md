@@ -1,4 +1,62 @@
-# Jarvis desktop prototype
+# J.A.R.V.I.S — SHILATECH
+
+Personal AI, on personal devices. Three faces, one brain:
+
+| Face | Command | What it is |
+|---|---|---|
+| **Holographic web UI** | `jarvis web` | Iron Man interface in the browser — wake word, voice, arc reactor, heads-up display. React + Three.js + GLSL, ported from [adewaskar/jarvis](https://github.com/adewaskar/jarvis) (MIT). |
+| **Desktop HUD** | `python app.py` | Tkinter circular HUD that stays open, works offline. |
+| **CLI** | `jarvis chat` | Agents, Business OS, memory, tools, voice. |
+
+The brain is the Python package in `src/jarvis`: agents (Iron Man, Business OS,
+ADHD coach, deep research, code assistant), engines (OpenAI, Ollama, vLLM, MLX,
+LiteLLM, mock), memory, tools and a FastAPI server.
+
+## Quick start
+
+```bash
+pip install -e ".[server]"
+jarvis web                     # holographic UI on http://localhost:5173
+```
+
+Open it in a **real Chrome or Edge window** — embedded preview panes block the
+microphone — click **INITIALISE** and say **"Hey Jarvis"**. Node 20+ is needed
+for the web face; the first run installs its dependencies for you.
+
+Prefer the other faces:
+
+```bash
+python app.py                  # desktop HUD
+jarvis chat --interactive      # CLI
+jarvis serve                   # API only, on :8000
+```
+
+## Which brain answers
+
+`jarvis web` runs our Python brain by default, so no Claude subscription is
+needed and the mock engine works with no network at all. The upstream brain is
+one flag away:
+
+```bash
+jarvis web --brain claude      # Claude Code, headless (needs a Claude Code login)
+jarvis web --engine openai     # our brain, OpenAI engine
+jarvis web --agent business_os # our brain, Business OS agent
+```
+
+See [docs/WEB_HOLOGRAM.md](docs/WEB_HOLOGRAM.md) for the architecture, the
+bridge protocol and every setting.
+
+## Is my build complete?
+
+```bash
+jarvis selftest                # imports every module in the manifest, checks the payload
+```
+
+This is what the MSI now ships with — the installer carries the complete source
+payload, not just two executables, and `selftest` fails loudly if anything is
+missing.
+
+## Desktop prototype notes
 
 A small Windows friendly desktop assistant built with Python's standard library. It can browse a local prompt library, prepare meeting briefs from details you paste, copy prompts, and ask an OpenAI compatible chat API to draft a response. The app runs without an API key in copy mode.
 

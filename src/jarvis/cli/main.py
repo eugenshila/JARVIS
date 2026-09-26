@@ -890,6 +890,30 @@ def weather(location: str):
         console.print("[red]Weather tool not available[/]")
 
 
+# Build completeness check — proves an MSI/EXE shipped the whole codebase
+try:
+    from jarvis.cli.selftest import selftest as selftest_cmd
+    cli.add_command(selftest_cmd)
+except ImportError as e:  # pragma: no cover - only in a broken build
+    @cli.command()
+    def selftest():
+        """Verify this build is complete (unavailable — the build is incomplete)."""
+        console.print(f"[red]selftest itself is missing from this build: {e}[/]")
+        raise SystemExit(1)
+
+
+# Holographic web interface — jarvis web
+try:
+    from jarvis.cli.web import web as web_cmd
+    cli.add_command(web_cmd)
+except ImportError as e:  # pragma: no cover
+    @cli.command()
+    def web():
+        """Launch the holographic web interface (failed to load)."""
+        console.print(f"[red]Web interface command failed to load: {e}[/]")
+        raise SystemExit(1)
+
+
 # Business OS group
 try:
     from jarvis.cli.business import business as business_group
