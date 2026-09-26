@@ -134,13 +134,26 @@ Ok "dist\jarvis-desktop.exe $([math]::Round((Get-Item dist/jarvis-desktop.exe).L
 # ----------------------------------------------------------------- 6. the gate
 if (-not $SkipSelftest) {
     Step 6 "Proving the executable contains the complete code"
-    $report = & dist\jarvis.exe selftest --json
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host $report
-        Die "INCOMPLETE BUILD — modules listed in the manifest are missing from jarvis.exe"
+    # 2>&1 so a bootloader failure (the exe not starting at all) is captured
+    # rather than vanishing into the runner's stderr.
+    $report = & dist\jarvis.exe selftest --json 2>&1
+    $gate = $LASTEXITCODE
+    $flat = ($report | Out-String).Trim()
+    Write-Host $flat
+    if ($gate -ne 0) {
+        # Put the actual reason in the message: on CI this becomes the one
+        # annotation that says which modules did not make it into the exe.
+        $why = ($flat -replace '\s+', ' ')
+        if ($why.Length -gt 900) { $why = $why.Substring(0, 900) }
+        if (-not $why) { $why = "jarvis.exe produced no output — the bootloader itself failed" }
+        Die "INCOMPLETE BUILD (selftest exit $gate): $why"
     }
-    $parsed = ($report -join "`n") | ConvertFrom-Json
-    Ok "$($parsed.modules_ok)/$($parsed.modules_expected) modules importable inside the exe"
+    try {
+        $parsed = $flat | ConvertFrom-Json
+        Ok "$($parsed.modules_ok)/$($parsed.modules_expected) modules importable inside the exe"
+    } catch {
+        Warn "selftest passed but its report could not be parsed"
+    }
 } else {
     Step 6 "Skipping the completeness gate"
 }

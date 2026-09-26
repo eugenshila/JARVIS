@@ -69,7 +69,7 @@ jobs:
           if ($code -ne 0) {
             # The raw log is not always reachable from every network; annotations
             # are served by the API, so replay the tail as annotations too.
-            Get-Content build.log -Tail 40 | ForEach-Object { Write-Host "::error::$_" }
+            Get-Content build.log -Tail 8 | ForEach-Object { Write-Host "::error::$_" }
             exit $code
           }
 
