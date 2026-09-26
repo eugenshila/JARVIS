@@ -10,7 +10,19 @@ the open browser window; the three priorities are saved in browser local storage
 On Windows, install [Ollama](https://ollama.com/download), Python 3.10+ and
 Node.js, then double-click `deploy\windows\RUN-OLLAMA-HUD.bat`. The launcher
 pulls the model if needed, installs project dependencies, starts the API and
-web interface, and opens `http://localhost:5173`.
+web interface, and opens `http://localhost:5173`. It also starts a minimized
+microphone companion: two quick claps open the HUD and play a short response.
+If clap sensitivity needs adjustment, set `JARVIS_CLAP_THRESHOLD` (default
+`0.18`, between `0` and `1`) before launching. The microphone audio stays in
+the companion process and is not sent to Ollama.
+
+To start JARVIS automatically **after Windows sign-in**, run the launcher once,
+then double-click `deploy\windows\ENABLE-HUD-STARTUP.bat`. To remove that startup
+entry, double-click `deploy\windows\DISABLE-HUD-STARTUP.bat`. Startup cannot
+show a desktop or listen to a microphone before the user signs in. A greeting
+uses a Windows installed voice, preferring UK English when available. It is
+not the film actor's voice. If the mic is unavailable, the HUD still supports
+typing.
 
 To run it manually:
 
@@ -25,9 +37,12 @@ In another terminal, run `cd frontend`, `npm ci`, then `npm run dev`. Open
 if the badge shows **OLLAMA OFFLINE**, start the Ollama app. The browser microphone
 and spoken reply buttons depend on browser support and microphone permission.
 
-The HUD is a visual assistant with local conversation, voice controls, and a
-small priority list. Its chat does not yet operate devices, email, calendar, or
-desktop files, and it does not claim to have done those actions. The circular
+The HUD is a visual assistant with local conversation, voice controls, clap
+activation, and a small priority list. The clap opens the HUD; to dictate a
+question, press its microphone button. Browser speech recognition may depend
+on the browser's service, while Ollama chat stays local. Its chat does not yet
+operate devices, email, calendar, or desktop files, and it does not claim to
+have done those actions. The circular
 reactor is an interface graphic, not a live battery or machine diagnostic.
 
 A small Windows friendly desktop assistant built with Python's standard library. It can browse a local prompt library, prepare meeting briefs from details you paste, copy prompts, and ask an OpenAI compatible chat API to draft a response. The app runs without an API key in copy mode.

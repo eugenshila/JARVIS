@@ -13,7 +13,7 @@ export default function IronManCircularHUD() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [focusItems, setFocusItems] = useState<string[]>(() => {
@@ -313,7 +313,7 @@ export default function IronManCircularHUD() {
         <aside className="p-4 border-r border-cyan-900/40 bg-black/40 space-y-4">
           <section className="hud-panel"><h2>MODEL LINK</h2><div className="text-cyan-300 text-lg mt-3">qwen2.5:3b</div><p className="text-slate-400 text-[11px] mt-2">Connected locally through Ollama on this computer.</p><p className="mt-3 text-[11px] text-amber-400">{status === "model_missing" ? "Run: ollama pull qwen2.5:3b" : status === "unavailable" ? "Start Ollama and the JARVIS server." : status === "ready" ? "Model installed and ready to answer." : "Checking local model..."}</p></section>
           <section className="hud-panel"><h2>TODAY’S THREE PRIORITIES</h2><div className="space-y-2 mt-3">{focusItems.length ? focusItems.map((item,i) => <div key={i} className="flex gap-2 items-start text-xs"><button className="text-cyan-400 border border-cyan-900 rounded-full w-5 h-5 shrink-0" title="Mark complete" onClick={() => setFocusItems(items => items.filter((_,j) => i !== j))}>✓</button><span>{item}</span></div>) : <p className="text-slate-500 text-[11px]">Set up to three things to focus on today.</p>}</div>{focusItems.length < 3 && <div className="flex gap-1 mt-3"><input className="hud-input min-w-0 w-full" value={newFocus} onChange={e => setNewFocus(e.target.value)} onKeyDown={e => e.key === "Enter" && addFocus()} placeholder="Add a priority"/><button onClick={addFocus} className="hud-button">+</button></div>}</section>
-          <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Use the microphone button for speech input. Spoken replies use your browser’s installed voice. Availability depends on your browser.</p><button className="hud-button mt-3" onClick={() => { setVoiceEnabled(v => !v); window.speechSynthesis?.cancel(); }}>{voiceEnabled ? "SPOKEN REPLIES ON" : "ENABLE SPOKEN REPLIES"}</button></section>
+          <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Spoken replies are on. JARVIS prefers an installed UK English voice. Use the microphone button to speak a question; browser recognition availability varies. Double-clap wake runs in the optional Windows companion.</p><button className="hud-button mt-3" onClick={() => { setVoiceEnabled(v => !v); window.speechSynthesis?.cancel(); }}>{voiceEnabled ? "SPOKEN REPLIES ON" : "ENABLE SPOKEN REPLIES"}</button></section>
         </aside>
         <main className="flex flex-col items-center justify-center py-8 px-4 min-w-0">
           <div className="text-cyan-600 tracking-[.3em] text-[10px] mb-2">INTERACTIVE REACTOR INTERFACE</div>
