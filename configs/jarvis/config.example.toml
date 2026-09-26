@@ -1,11 +1,19 @@
+# Lightweight local setup for computers with 8 GB RAM.
+# Install the selected model with: ollama pull llama3.2:3b
 preset = "chat-simple"
 
 [engine]
-type = "openai"  # openai, ollama, mock
-model = "gpt-4o-mini"
-api_url = "https://api.openai.com/v1/chat/completions"
+type = "ollama"  # ollama, openai, mock
+model = "llama3.2:3b"
+api_url = "http://localhost:11434"
 temperature = 0.7
 max_tokens = 2048
+# JARVIS routes tasks to one local model at a time.
+
+[models]
+chat = "llama3.2:3b"
+coding = "qwen2.5-coder:3b"
+planning = "qwen2.5:3b"
 # api_key is read from OPENAI_API_KEY env, not stored here
 
 [telemetry]

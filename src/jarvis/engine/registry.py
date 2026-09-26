@@ -71,7 +71,10 @@ def get_engine(config: JarvisConfig | EngineConfig | None = None, engine_type: s
     if engine_type:
         t = engine_type
 
-    if t == "ollama":
+    if t in ("ollama", "hermes"):
+        # Hermes is served locally through Ollama; allow a friendly engine alias.
+        if t == "hermes" and eng_cfg.model in ("", "gpt-4o-mini"):
+            eng_cfg.model = "nous-hermes2:10.7b"
         return OllamaEngine(eng_cfg)
     if t == "mock":
         return MockEngine(model=eng_cfg.model)
@@ -92,7 +95,7 @@ def get_engine(config: JarvisConfig | EngineConfig | None = None, engine_type: s
 
 def list_engines() -> list[str]:
     base = [e.value for e in EngineType]
-    extra = ["vllm", "mlx", "litellm", "gemma_cpp"]
+    extra = ["hermes", "vllm", "mlx", "litellm", "gemma_cpp"]
     # dedupe while preserving
     seen = set()
     out = []

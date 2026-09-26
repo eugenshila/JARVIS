@@ -90,7 +90,7 @@ class ModernCircularHUDApp(tk.Tk):
         right_top.pack(side="right")
         self.online_dot = tk.Label(right_top, text="●", bg="black", fg="#22c55e", font=("JetBrains Mono", 10))
         self.online_dot.pack(side="left")
-        self.online_label = tk.Label(right_top, text="ONLINE • MODERN HUD", bg="black", fg="#22c55e", font=("JetBrains Mono", 9))
+        self.online_label = tk.Label(right_top, text="JARVIS READY • LOCAL AI", bg="black", fg="#22c55e", font=("JetBrains Mono", 9))
         self.online_label.pack(side="left", padx=4)
         tk.Label(right_top, text=f"USER: {self.user_name.upper()}", bg="black", fg="#94a3b8", font=("JetBrains Mono", 8)).pack(side="left", padx=8)
         self.arc_label_top = tk.Label(right_top, text=f"ARC {self._arc_power:.1f}%", bg="#083344", fg="#22d3ee", font=("JetBrains Mono", 8), borderwidth=1, relief="solid", padx=4)
@@ -132,7 +132,7 @@ class ModernCircularHUDApp(tk.Tk):
         right.pack_propagate(False)
 
         decision_frame = tk.LabelFrame(right, text="🌐 ONLINE — MODERN HUD v0.1.9.9", bg="black", fg="#22d3ee", font=("JetBrains Mono", 8), padx=6, pady=6)
-        decision_frame.pack(fill="x", pady=4)
+        decision_frame.pack_forget()  # Model routing is automatic; hide legacy mode controls
         tk.Label(decision_frame, text="Modern Circular HUD active\nSame interface online/offline", bg="black", fg="#94a3b8", font=("JetBrains Mono", 7), wraplength=220, justify="left").pack(anchor="w")
         tk.Button(decision_frame, text="1. FULL STACK ONLINE", command=lambda: self.add_message("system", "FULL STACK ONLINE — OpenAI if key else Ollama local"), bg="#022c22", fg="#22c55e", font=("JetBrains Mono", 8, "bold"), borderwidth=1, relief="solid").pack(fill="x", pady=2)
         tk.Button(decision_frame, text="2. BASIC OFFLINE LOCAL", command=lambda: self.add_message("system", "BASIC OFFLINE — Nothing leaves device"), bg="#422006", fg="#f59e0b", font=("JetBrains Mono", 7, "bold"), borderwidth=1, relief="solid").pack(fill="x", pady=2)

@@ -7,6 +7,10 @@ from urllib.error import HTTPError, URLError
 
 
 def generate(prompt: str, context: str) -> str:
+    # Deterministic offline path used by tests and supported for local smoke checks.
+    if os.environ.get("JARVIS_MOCK", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return f"Mock response for: {prompt}"
+
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not key:
         raise ValueError("Set OPENAI_API_KEY to enable AI responses, or use Copy prompt.")

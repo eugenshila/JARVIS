@@ -34,6 +34,13 @@ class AgentPreset:
 
 
 PRESETS: dict[str, AgentPreset] = {
+    "hermes": AgentPreset(
+        name="hermes",
+        description="Local Hermes agent through Ollama",
+        system_prompt="You are Hermes, the local JARVIS AI agent. Be helpful, precise, privacy-preserving, and transparent about uncertainty. Use available tools carefully and ask before destructive actions.",
+        tools=["memory_search", "memory_write", "file_read", "web_search"],
+        engine="hermes",
+    ),
     "chat-simple": AgentPreset(
         name="chat-simple",
         description="Lightweight conversation, no tools",
@@ -90,7 +97,7 @@ class AutoConfig:
 @dataclass
 class JarvisConfig:
     home: Path = field(default_factory=get_home)
-    engine: EngineConfig = field(default_factory=EngineConfig)
+    engine: EngineConfig = field(default_factory=lambda: EngineConfig(type=EngineType.OLLAMA, model="llama3.2:3b", api_url="http://localhost:11434"))
     auto: AutoConfig = field(default_factory=AutoConfig)
     preset: str = "chat-simple"
     telemetry_enabled: bool = False
@@ -106,6 +113,8 @@ class JarvisConfig:
             self.engine.api_url = os.environ["JARVIS_API_URL"]
         if os.environ.get("JARVIS_MODEL"):
             self.engine.model = os.environ["JARVIS_MODEL"]
+        elif os.environ.get("OLLAMA_MODEL"):
+            self.engine.model = os.environ["OLLAMA_MODEL"]
 
     @property
     def config_path(self) -> Path:
@@ -130,9 +139,10 @@ class JarvisConfig:
                         eng_type = EngineType.AUTO
                     else:
                         eng_type = EngineType(eng_type_str) if eng_type_str in [e.value for e in EngineType] else EngineType.OPENAI
+                default_model = "llama3.2:3b" if eng_type == EngineType.OLLAMA else cfg.engine.model
                 cfg.engine = EngineConfig(
                     type=eng_type,
-                    model=eng.get("model", cfg.engine.model),
+                    model=eng.get("model", default_model),
                     api_url=eng.get("api_url", cfg.engine.api_url),
                     api_key=eng.get("api_key", cfg.engine.api_key),
                     temperature=eng.get("temperature", 0.7),
@@ -180,3 +190,12 @@ class JarvisConfig:
 
     def get_preset(self) -> AgentPreset:
         return PRESETS.get(self.preset, PRESETS["chat-simple"])
+
+    def model_for_preset(self, preset: str | None = None) -> str:
+        """Select a local model by task without exposing network mode to the user."""
+        name = (preset or self.preset or "").lower().replace("-", "_")
+        if "code" in name:
+            return os.environ.get("JARVIS_CODING_MODEL", "qwen2.5-coder:3b")
+        if "business" in name or "shilatech" in name or "research" in name:
+            return os.environ.get("JARVIS_PLANNING_MODEL", "qwen2.5:3b")
+        return os.environ.get("JARVIS_CHAT_MODEL", "llama3.2:3b")

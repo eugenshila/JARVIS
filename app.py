@@ -120,7 +120,7 @@ class CircularHUDApp(tk.Tk):
         right_top.pack(side="right")
         self.online_dot = tk.Label(right_top, text="●", bg="black", fg="#22c55e", font=("JetBrains Mono", 10))
         self.online_dot.pack(side="left")
-        self.online_label = tk.Label(right_top, text="CHECKING... ONLINE", bg="black", fg="#22c55e", font=("JetBrains Mono", 9))
+        self.online_label = tk.Label(right_top, text="JARVIS READY", bg="black", fg="#22c55e", font=("JetBrains Mono", 9))
         self.online_label.pack(side="left", padx=4)
         self.decide_btn = tk.Button(right_top, text="CLICK TO DECIDE", command=self.toggle_decision, bg="#022c22", fg="#22c55e", font=("JetBrains Mono", 8), relief="solid", borderwidth=1, padx=6)
         self.decide_btn.pack(side="left", padx=6)
@@ -187,7 +187,7 @@ class CircularHUDApp(tk.Tk):
 
         # Decision panel — interactive when online
         self.decision_frame = tk.LabelFrame(right, text="🌐 ONLINE — INTERACTIVE DECISION — SHILATECH", bg="black", fg="#22d3ee", font=("JetBrains Mono", 8), padx=6, pady=6)
-        self.decision_frame.pack(fill="x", pady=4)
+        self.decision_frame.pack_forget()  # Model routing is automatic; hide legacy mode controls
         tk.Label(self.decision_frame, text="Network: Online — Same circular interface, you decide:", bg="black", fg="#94a3b8", font=("JetBrains Mono", 7), wraplength=220, justify="left").pack(anchor="w")
         tk.Button(self.decision_frame, text="1. FULL STACK ONLINE", command=lambda: self.decide_mode("1"), bg="#022c22", fg="#22c55e", font=("JetBrains Mono", 8, "bold"), borderwidth=1, relief="solid").pack(fill="x", pady=2)
         tk.Label(self.decision_frame, text="OpenAI if key HTTPS else Ollama local, full search, best quality, Badge ONLINE FULL STACK", bg="black", fg="#475569", font=("JetBrains Mono", 6), wraplength=220, justify="left").pack(fill="x")
@@ -203,7 +203,7 @@ class CircularHUDApp(tk.Tk):
         tk.Label(weather_frame, text="Precipitation: 10% • Humidity: 65% • Wind: 5 mph", bg="black", fg="#475569", font=("JetBrains Mono", 6), wraplength=220).pack(anchor="w", pady=2)
 
         # System
-        sys_frame = tk.LabelFrame(right, text="SYSTEM • ONLINE/OFFLINE", bg="black", fg="#22d3ee", font=("JetBrains Mono", 8), padx=6, pady=6)
+        sys_frame = tk.LabelFrame(right, text="SYSTEM • JARVIS", bg="black", fg="#22d3ee", font=("JetBrains Mono", 8), padx=6, pady=6)
         sys_frame.pack(fill="x", pady=4)
         self.sys_labels = {}
         for k in ["Engine", "Mode", "Security", "Data"]:
@@ -450,26 +450,15 @@ class CircularHUDApp(tk.Tk):
             self.canvas.create_text(70, 60, text="99% - Strength", fill="#22d3ee", font=("JetBrains Mono", 8, "bold"), anchor="w")
             self.canvas.create_text(70, 75, text="Home WiFi - Source", fill="#64748b", font=("JetBrains Mono", 7), anchor="w")
             self.canvas.create_text(70, 95, text="Jarvis list", fill="#475569", font=("JetBrains Mono", 7), anchor="w")
-            self.canvas.create_text(70, 110, text="• backup themes
-• backup control
-• warning control
-• system diagnostics
-• network status", fill="#334155", font=("JetBrains Mono", 6), justify="left", anchor="w")
-            self.canvas.create_text(70, 170, text="SYSTEM • ONLINE
-Engine: OLLAMA
-Mode: FULL STACK
-Latency: 33ms
-SHILATECH SECURE", fill="#0e7490", font=("JetBrains Mono", 6), justify="left", anchor="w")
+            self.canvas.create_text(70, 110, text="• backup themes\n• backup control\n• warning control\n• system diagnostics\n• network status", fill="#334155", font=("JetBrains Mono", 6), justify="left", anchor="w")
+            self.canvas.create_text(70, 170, text="SYSTEM • ONLINE\nEngine: OLLAMA\nMode: FULL STACK\nLatency: 33ms\nSHILATECH SECURE", fill="#0e7490", font=("JetBrains Mono", 6), justify="left", anchor="w")
 
             # Right side - weather like screenshot more modern
             self.canvas.create_text(self.canvas_size-70, 60, text="WEATHER • NAIROBI", fill="#0e7490", font=("JetBrains Mono", 7), anchor="e")
             self.canvas.create_text(self.canvas_size-70, 80, text="56°F", fill="#7dd3fc", font=("JetBrains Mono", 16, "bold"), anchor="e")
             self.canvas.create_text(self.canvas_size-70, 95, text="Partly Cloudy", fill="#cbd5e1", font=("JetBrains Mono", 8), anchor="e")
             self.canvas.create_text(self.canvas_size-70, 108, text="High 74° • Low 60°", fill="#64748b", font=("JetBrains Mono", 7), anchor="e")
-            self.canvas.create_text(self.canvas_size-70, 125, text="Precipitation: 10%
-Humidity: 65%
-Wind: 5 mph
-SHILATECH", fill="#475569", font=("JetBrains Mono", 6), justify="right", anchor="e")
+            self.canvas.create_text(self.canvas_size-70, 125, text="Precipitation: 10%\nHumidity: 65%\nWind: 5 mph\nSHILATECH", fill="#475569", font=("JetBrains Mono", 6), justify="right", anchor="e")
 
             # Bottom extra data like screenshot
             self.canvas.create_text(cx, self.canvas_size-20, text="Trash - 44 items • Size - 248.95 MB • Source - AC Line • Power - 90% • ONLINE SECURE • ENCRYPTED • 33ms • SHILATECH", fill="#334155", font=("JetBrains Mono", 7))

@@ -18,8 +18,11 @@ class BaseAgent(ABC):
 
     def __init__(self, config: JarvisConfig | None = None, engine: BaseEngine | None = None, preset: AgentPreset | None = None):
         self.config = config or JarvisConfig.load()
-        self.engine = engine or get_engine(self.config)
         self.preset = preset or self.config.get_preset()
+        # Keep one local model active and choose it by task category.
+        if engine is None and self.config.engine.type.value in ("ollama", "auto"):
+            self.config.engine.model = self.config.model_for_preset(self.preset.name)
+        self.engine = engine or get_engine(self.config)
         self.tools = get_tools(self.preset.tools)
 
     def _system_message(self) -> Message:
