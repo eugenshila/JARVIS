@@ -48,10 +48,16 @@ jobs:
         run: |
           choco install wixtoolset --no-progress -y
           if ($LASTEXITCODE -ne 0) { throw "WiX installation failed" }
-          $candle = Get-ChildItem 'C:\Program Files (x86)' -Filter candle.exe -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match 'WiX Toolset' } | Select-Object -First 1
+          $candle = @(
+            'C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe',
+            'C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe'
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $candle) {
+            $candle = Get-ChildItem 'C:\Program Files (x86)' -Filter candle.exe -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match 'WiX Toolset' } | Select-Object -First 1
+          }
           if (-not $candle) { throw "WiX tools missing" }
-          $candle.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Split-Path $candle) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build MSI
         shell: pwsh
