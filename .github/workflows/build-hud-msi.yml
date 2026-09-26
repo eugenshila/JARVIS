@@ -1,0 +1,93 @@
+name: Build JARVIS Ollama HUD MSI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-hud-msi.yml'
+      - 'src/jarvis/**'
+      - 'frontend/**'
+      - 'deploy/windows/hud.wxs'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build HUD
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Python packaging requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pyinstaller sounddevice numpy
+
+      - name: Package local API, HUD, and clap companion
+        shell: pwsh
+        run: |
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice src/jarvis/cli/hud_launcher.py
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD.exe)) { throw "HUD EXE build failed" }
+
+      - name: Install WiX v3
+        shell: pwsh
+        run: |
+          choco install wixtoolset --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw "WiX installation failed" }
+          $candle = Get-ChildItem 'C:\Program Files (x86)' -Filter candle.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'WiX Toolset' } | Select-Object -First 1
+          if (-not $candle) { throw "WiX tools missing" }
+          $candle.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          candle.exe -arch x64 deploy/windows/hud.wxs -o dist/hud.wixobj
+          if ($LASTEXITCODE -ne 0) { throw "WiX compile failed" }
+          light.exe dist/hud.wixobj -o dist/JARVIS-HUD-0.2.0-x64.msi
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD-0.2.0-x64.msi)) { throw "MSI link failed" }
+
+      - name: Install and smoke test MSI
+        shell: pwsh
+        run: |
+          $msi = (Resolve-Path dist/JARVIS-HUD-0.2.0-x64.msi).Path
+          $result = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/i', "`"$msi`"", '/qn', '/norestart', 'MSIINSTALLPERUSER=1')
+          if ($result.ExitCode -ne 0) { throw "MSI install failed: $($result.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA 'JARVIS HUD\JARVIS-HUD.exe'
+          if (-not (Test-Path $exe)) { throw "Installed HUD EXE missing" }
+          $process = Start-Process $exe -PassThru
+          try {
+            $healthy = $false
+            for ($i=0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $response = Invoke-WebRequest -Uri http://127.0.0.1:8765/ -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200 -and $response.Content -match 'JARVIS') { $healthy = $true; break }
+              } catch { }
+            }
+            if (-not $healthy) { throw "Installed HUD did not serve its interface" }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-HUD-0.2.0-Windows
+          path: |
+            dist/JARVIS-HUD-0.2.0-x64.msi
+            dist/JARVIS-HUD.exe
+          if-no-files-found: error

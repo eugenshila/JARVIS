@@ -15,7 +15,7 @@ import time
 import webbrowser
 from pathlib import Path
 
-HUD_URL = "http://localhost:5173"
+HUD_URL = os.environ.get("JARVIS_HUD_URL", "http://127.0.0.1:8765")
 STARTUP_NAME = "JARVIS-HUD.bat"
 
 

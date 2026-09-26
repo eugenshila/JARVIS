@@ -23,7 +23,7 @@ if not exist "frontend\node_modules" (
 )
 start "JARVIS API" cmd /k .venv\Scripts\python.exe -m uvicorn jarvis.server.api:app --host 127.0.0.1 --port 8000
 start "JARVIS HUD" /D "%CD%\frontend" cmd /k npm run dev
-start "JARVIS Clap Wake" /min cmd /k .venv\Scripts\python.exe -m jarvis.startup.hud_companion --greet --clap
+start "JARVIS Clap Wake" /min cmd /k "set JARVIS_HUD_URL=http://localhost:5173&& .venv\Scripts\python.exe -m jarvis.startup.hud_companion --greet --clap"
 echo JARVIS will open at http://localhost:5173
 start "" "http://localhost:5173"
 endlocal

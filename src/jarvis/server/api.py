@@ -5,15 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 import time
 import uuid
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from jarvis.agents.registry import get_agent, list_agents
@@ -279,7 +282,7 @@ def memory_stats():
     return stats
 
 
-@app.get("/")
+@app.get("/api")
 def root():
     return {
         "name": "JARVIS",
@@ -292,6 +295,13 @@ def root():
         "engines": list_engines(),
         "agents": list_agents(),
     }
+
+
+# The packaged MSI serves its built HUD from the same local API process.
+_bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
+_frontend = _bundle_root / "frontend" / "dist"
+if _frontend.joinpath("index.html").exists():
+    app.mount("/", StaticFiles(directory=_frontend, html=True), name="hud")
 
 
 def serve_cli():
