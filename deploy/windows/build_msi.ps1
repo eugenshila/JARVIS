@@ -28,9 +28,18 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 Set-Location $repo
 
-function Step($n, $text) { Write-Host "`n[$n] $text" -ForegroundColor Cyan }
+function Step($n, $text) {
+    Write-Host "`n[$n] $text" -ForegroundColor Cyan
+    # Annotations are served by the API even where the raw log is not, so on a
+    # runner each step also leaves a breadcrumb: if the build dies, the last
+    # notice says exactly which stage it died in.
+    if ($env:GITHUB_ACTIONS) { Write-Host "::notice::step $n — $text" }
+}
 function Ok($text) { Write-Host "  $text" -ForegroundColor Green }
-function Warn($text) { Write-Host "  $text" -ForegroundColor Yellow }
+function Warn($text) {
+    Write-Host "  $text" -ForegroundColor Yellow
+    if ($env:GITHUB_ACTIONS) { Write-Host "::warning::$text" }
+}
 function Die($text) {
     Write-Host "  $text" -ForegroundColor Red
     # On a runner this becomes an annotation, which survives where the raw log
