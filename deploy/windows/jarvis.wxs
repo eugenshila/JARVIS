@@ -1,96 +1,138 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <!-- JARVIS SHILATECH MSI Installer — WiX Toolset v3.11 — Fixes disappearing with onefile -->
-  <!-- Build: .\build_msi.ps1 -Version 0.1.9.3 -OneFile  (onefile single exe contains all deps, no missing DLLs) -->
+<!--
+  JARVIS SHILATECH — Windows installer (WiX Toolset v3.11)
 
-  <Product Id="*" 
-           Name="JARVIS - SHILATECH - Personal AI, On Personal Devices" 
-           Language="1033" 
-           Version="0.0.0" 
-           Manufacturer="SHILATECH" 
+  Built by deploy/windows/build_msi.ps1, which passes the preprocessor
+  variables this file expects:
+
+      candle -arch x64 -dVersion=0.1.10.0 -dPayloadDir=dist\payload ...
+
+  What goes in, and why it is more than it used to be:
+
+    * jarvis.exe          the CLI and the launcher for everything else
+    * jarvis-desktop.exe  the Tkinter HUD
+    * the COMPLETE source payload, harvested from dist\payload by heat.exe
+      into payload.wxs and referenced here as PayloadComponents
+
+  The payload is the fix for "the MSI doesn't contain the complete code".
+  Two frozen executables are not the codebase: without src/, app.py, configs,
+  docs and web/ on disk there is no `python app.py`, no `jarvis web`, nothing
+  to inspect and nothing to repair. It installs alongside the executables, so
+  `jarvis.exe selftest` can prove — on the target machine — that every module
+  and every file in the manifest actually arrived.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <Product Id="*"
+           Name="JARVIS - SHILATECH - Personal AI, On Personal Devices"
+           Language="1033"
+           Version="$(var.Version)"
+           Manufacturer="SHILATECH"
            UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
 
-    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH — Local-first Personal AI — Voice speaks online/offline — Fixes disappearing" Comments="Apache 2.0 License SHILATECH" />
+    <Package InstallerVersion="200"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Manufacturer="SHILATECH"
+             Description="JARVIS SHILATECH — CLI, desktop HUD, holographic web interface and the complete source"
+             Comments="Apache 2.0 — SHILATECH" />
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <!-- AllowSameVersionUpgrades so a rebuilt installer of the same version
+         replaces the old files instead of installing beside them, which is how
+         a stale build survives a reinstall and looks like a broken fix. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
-      <ComponentGroupRef Id="ProductComponents" />
+    <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1"
+             Description="Executables, Start Menu entries and the complete source payload.">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="DesktopExecutable" />
       <ComponentRef Id="PathEnv" />
-      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="StartMenuShortcuts" />
+      <ComponentGroupRef Id="PayloadComponents" />
     </Feature>
 
-    <!-- UI -->
     <UIRef Id="WixUI_InstallDir" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-    <WixVariable Id="WixUILicenseRtf" Value="deploy/windows/license.rtf" />
-    <WixVariable Id="WixUIBannerBmp" Value="deploy/windows/banner.bmp" />
-    <WixVariable Id="WixUIDialogBmp" Value="deploy/windows/dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="deploy\windows\license.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="deploy\windows\banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="deploy\windows\dialog.bmp" />
 
-    <!-- Directories -->
+    <Icon Id="JarvisIcon.exe" SourceFile="assets\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="JarvisIcon.exe" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/eugenshila/JARVIS" />
+
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH">
-          <!-- For onefile: single exe contains all deps, fixes disappearing -->
-          <!-- For onedir: use heat.exe dir dist/jarvis -cg ProductComponents -dr INSTALLFOLDER -gg -srd -out deploy/windows/files.wxs -->
-          <Directory Id="BIN" Name="bin" />
-        </Directory>
+        <!-- heat.exe harvests the payload straight into this directory, so the
+             installed tree looks exactly like a checkout with the two
+             executables added: src\, web\, app.py, configs\, docs\. -->
+        <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH"/>
+        <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH" />
       </Directory>
     </Directory>
 
-    <!-- Components - OneFile mode: single exe, no disappearing -->
     <DirectoryRef Id="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="*">
-        <File Id="JarvisExe" Source="dist/jarvis.exe" KeyPath="yes" />
+        <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
       </Component>
-      <Component Id="ConfigExample" Guid="*">
-        <File Id="ConfigToml" Source="configs/jarvis/config.example.toml" />
+      <Component Id="DesktopExecutable" Guid="*">
+        <File Id="JarvisDesktopExe" Source="dist\jarvis-desktop.exe" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 
     <DirectoryRef Id="ApplicationProgramsFolder">
-      <Component Id="StartMenuShortcut" Guid="*">
-        <Shortcut Id="ApplicationStartMenuShortcut" 
-                  Name="JARVIS SHILATECH"
-                  Description="Personal AI, Voice speaks online/offline, Good Morning Eugene"
+      <Component Id="StartMenuShortcuts" Guid="*">
+        <Shortcut Id="DesktopHudShortcut"
+                  Name="JARVIS Desktop HUD"
+                  Description="Circular HUD that stays open — works offline"
+                  Target="[INSTALLFOLDER]jarvis-desktop.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="WebShortcut"
+                  Name="JARVIS Holographic Web"
+                  Description="Iron Man browser interface — Hey Jarvis, voice, arc reactor (needs Node 20+)"
                   Target="[INSTALLFOLDER]jarvis.exe"
-                  WorkingDirectory="INSTALLFOLDER"/>
-        <Shortcut Id="ApplicationChatShortcut" 
-                  Name="JARVIS Chat SHILATECH"
-                  Description="Interactive chat Good Morning Eugene"
+                  Arguments="web"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="ChatShortcut"
+                  Name="JARVIS Chat"
+                  Description="Interactive CLI chat"
                   Target="[INSTALLFOLDER]jarvis.exe"
                   Arguments="chat --interactive"
-                  WorkingDirectory="INSTALLFOLDER"/>
-        <Shortcut Id="UninstallProduct" 
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="DoctorShortcut"
+                  Name="JARVIS Doctor"
+                  Description="System check"
+                  Target="[INSTALLFOLDER]jarvis.exe"
+                  Arguments="doctor"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <!-- The answer to "did this install everything?", on the Start Menu,
+             so it can be checked without a terminal. -->
+        <Shortcut Id="SelftestShortcut"
+                  Name="Verify JARVIS is complete"
+                  Description="Check every module and source file arrived"
+                  Target="[INSTALLFOLDER]jarvis.exe"
+                  Arguments="selftest --strict"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="UninstallShortcut"
                   Name="Uninstall JARVIS SHILATECH"
-                  Description="Uninstall JARVIS SHILATECH"
+                  Description="Remove JARVIS"
                   Target="[System64Folder]msiexec.exe"
-                  Arguments="/x [ProductCode]"/>
-        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
-        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                  Arguments="/x [ProductCode]" />
+        <RemoveFolder Id="CleanUpShortcuts" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 
-    <!-- Environment PATH -->
     <DirectoryRef Id="TARGETDIR">
       <Component Id="PathEnv" Guid="*">
         <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
-        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes"/>
+        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
-
-    <!-- For onedir mode, harvest with heat.exe -->
-    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <!-- 
-        For onedir: heat dir dist/jarvis -cg ProductComponents -dr INSTALLFOLDER -gg -srd -out deploy/windows/files.wxs
-        Then include files.wxs in build.
-        For onefile: this group can be empty, single exe contains all.
-      -->
-    </ComponentGroup>
 
   </Product>
 </Wix>

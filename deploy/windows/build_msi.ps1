@@ -1,250 +1,187 @@
-# JARVIS Windows MSI Builder - SHILATECH v0.1.9.3 - Fixes disappearing issue
-# Run on Windows 10/11 with Python 3.10+ and WiX Toolset installed
-# Usage: .\build_msi.ps1 -Version 0.1.9.3 -OneFile (OneFile fixes disappearing)
+# JARVIS SHILATECH — Windows installer builder
+#
+# One script for CI and for a laptop. It builds the two executables, stages the
+# COMPLETE source payload, proves the build is complete, and only then wraps it
+# all in an MSI.
+#
+#   .\deploy\windows\build_msi.ps1                       # full build
+#   .\deploy\windows\build_msi.ps1 -Light                # skip the heavy extras (fast)
+#   .\deploy\windows\build_msi.ps1 -Version 0.1.10.0     # explicit version
+#   .\deploy\windows\build_msi.ps1 -SkipDeps             # deps already installed
+#
+# Why the selftest gate exists: the previous installers shipped whatever
+# PyInstaller happened to collect, and a module that quietly failed to bundle
+# only surfaced later as a feature that "isn't in the MSI". The gate imports
+# every module in the manifest inside the frozen exe and fails the build here,
+# where it is cheap to fix.
 
 param(
-    [string]$Version = "0.1.9.3",
+    [string]$Version = "",
     [string]$PythonExe = "python",
     [switch]$SkipDeps,
-    [switch]$OneFile
+    [switch]$Light,
+    [switch]$NoPayload,
+    [switch]$SkipSelftest
 )
 
 $ErrorActionPreference = "Stop"
+$repo = (Resolve-Path "$PSScriptRoot\..\..").Path
+Set-Location $repo
 
-Write-Host "=== JARVIS SHILATECH MSI Builder v$Version ===" -ForegroundColor Green
-Write-Host "Fix: OneFile mode fixes opening but disappearing (single exe contains all DLLs)" -ForegroundColor Cyan
+function Step($n, $text) { Write-Host "`n[$n] $text" -ForegroundColor Cyan }
+function Ok($text) { Write-Host "  $text" -ForegroundColor Green }
+function Warn($text) { Write-Host "  $text" -ForegroundColor Yellow }
+function Die($text) { Write-Host "  $text" -ForegroundColor Red; exit 1 }
 
-# Default to OneFile to fix disappearing - single exe no missing deps
-if (-not $OneFile) {
-    Write-Host "WARNING: Onedir build may cause disappearing if MSI only includes exe without _internal folder" -ForegroundColor Yellow
-    Write-Host "Recommend: .\build_msi.ps1 -Version $Version -OneFile  # Fixes disappearing" -ForegroundColor Yellow
-    # For backward compat, still allow onedir but warn
+# ---------------------------------------------------------------- 1. manifest
+Step 1 "Refreshing the build manifest"
+& $PythonExe deploy/gen_manifest.py
+if ($LASTEXITCODE -ne 0) { Die "manifest generation failed" }
+
+if (-not $Version) {
+    $line = Select-String -Path "src/jarvis/_manifest.py" -Pattern '^VERSION = "(.+)"' | Select-Object -First 1
+    $Version = $line.Matches[0].Groups[1].Value
+}
+# MSI versions are numeric and at most four fields.
+if ($Version -notmatch '^\d+(\.\d+){0,3}$') { Die "version '$Version' is not a valid MSI version" }
+Ok "version $Version"
+
+$hidden = Get-Content "deploy/windows/hiddenimports.txt" | Where-Object { $_.Trim() }
+Ok "$($hidden.Count) modules to bundle"
+
+# ------------------------------------------------------------------- 2. tools
+Step 2 "Checking tools"
+try { Ok (& $PythonExe --version 2>&1) } catch { Die "Python 3.10+ not found" }
+
+$wixBin = $null
+foreach ($p in @(
+        "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin",
+        "${env:ProgramFiles}\WiX Toolset v3.11\bin",
+        "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin",
+        "C:\tools\wix")) {
+    if (Test-Path "$p\candle.exe") { $wixBin = $p; break }
+}
+if ($wixBin) {
+    $env:PATH = "$env:PATH;$wixBin"
+    Ok "WiX at $wixBin"
+} elseif (Get-Command candle.exe -ErrorAction SilentlyContinue) {
+    Ok "WiX on PATH"
+} else {
+    Warn "WiX not found — will build executables only (choco install wixtoolset)"
 }
 
-# 1. Check prerequisites
-Write-Host "`n[1/6] Checking prerequisites..." -ForegroundColor Cyan
-
-# Python
-try {
-    $pyVersion = & $PythonExe --version 2>&1
-    Write-Host "  Python: $pyVersion" -ForegroundColor Green
-} catch {
-    Write-Host "  ERROR: Python not found. Install Python 3.10+ from python.org" -ForegroundColor Red
-    Write-Host "  Make sure to check 'Add python.exe to PATH'" -ForegroundColor Yellow
-    exit 1
-}
-
-# WiX Toolset
-$wixFound = $false
-$wixPaths = @(
-    "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin\candle.exe",
-    "${env:ProgramFiles}\WiX Toolset v3.11\bin\candle.exe",
-    "C:\tools\wix\candle.exe"
-)
-foreach ($p in $wixPaths) {
-    if (Test-Path $p) {
-        $wixFound = $true
-        $wixBin = Split-Path $p
-        Write-Host "  WiX Toolset: Found at $wixBin" -ForegroundColor Green
-        $env:PATH += ";$wixBin"
-        break
-    }
-}
-if (-not $wixFound) {
-    Write-Host "  WARNING: WiX Toolset not found. Will build EXE only, not MSI" -ForegroundColor Yellow
-    Write-Host "  Install WiX from: https://wixtoolset.org/releases/" -ForegroundColor Yellow
-    Write-Host "  Or: choco install wixtoolset" -ForegroundColor Yellow
-}
-
-# PyInstaller
+# -------------------------------------------------------------------- 3. deps
 if (-not $SkipDeps) {
-    Write-Host "`n[2/6] Installing build deps..." -ForegroundColor Cyan
-    & $PythonExe -m pip install --upgrade pip
-    & $PythonExe -m pip install pyinstaller==6.10.0
-    & $PythonExe -m pip install -e .[all] --break-system-packages 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        & $PythonExe -m pip install -e .[all]
+    Step 3 "Installing build dependencies"
+    & $PythonExe -m pip install --upgrade pip --quiet
+    & $PythonExe -m pip install pyinstaller==6.10.0 --quiet
+    if ($Light) {
+        & $PythonExe -m pip install -e ".[server]" --quiet
+    } else {
+        # Not [all]: vllm has no Windows wheel and fails the whole install.
+        & $PythonExe -m pip install -e ".[server,memory,tools-search]" --quiet
     }
+    if ($LASTEXITCODE -ne 0) { Die "dependency install failed" }
+    Ok "dependencies ready"
+} else {
+    Step 3 "Skipping dependency install"
 }
 
-# 2. Clean previous builds
-Write-Host "`n[3/6] Cleaning..." -ForegroundColor Cyan
-Remove-Item -Recurse -Force dist, build -ErrorAction SilentlyContinue
-Remove-Item -Force *.spec -ErrorAction SilentlyContinue
+# ------------------------------------------------------------------- 4. clean
+Step 4 "Cleaning previous output"
+Remove-Item -Recurse -Force dist, build, obj -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path obj | Out-Null
+Ok "clean"
 
-# 3. Build with PyInstaller - OneFile fixes disappearing
-Write-Host "`n[4/6] Building EXE with PyInstaller (OneFile fixes disappearing)..." -ForegroundColor Cyan
+# --------------------------------------------------------------- 5. executables
+Step 5 "Building executables (onefile)"
+$hiddenArgs = @()
+foreach ($m in $hidden) { $hiddenArgs += @("--hidden-import", $m) }
 
-$pyInstallerArgs = @(
-    "--name", "jarvis",
-    "--console",
-    "--icon", "assets/icon.ico",
-    "--add-data", "src/jarvis;jarvis",
-    "--add-data", "configs;configs",
-    "--hidden-import", "jarvis.engine.vllm_engine",
-    "--hidden-import", "jarvis.engine.mlx_engine",
-    "--hidden-import", "jarvis.engine.litellm_engine",
-    "--hidden-import", "jarvis.memory.vector_store",
-    "--hidden-import", "jarvis.tools.search_tools",
-    "--hidden-import", "jarvis.tools.network_tools",
-    "--hidden-import", "jarvis.core.network",
-    "--hidden-import", "jarvis.engine.auto_engine",
-    "--hidden-import", "jarvis.agents.ironman",
-    "--hidden-import", "jarvis.agents.adhd_coach",
-    "--hidden-import", "jarvis.tools.adhd_tools",
-    "--hidden-import", "jarvis.tools.adhd_advanced",
-    "--hidden-import", "jarvis.tools.calendar_tools",
-    "--hidden-import", "jarvis.tools.email_tools",
-    "--hidden-import", "jarvis.tools.focus_enhanced",
-    "--hidden-import", "jarvis.tools.face_tool",
-    "--hidden-import", "jarvis.tools.startup_tools",
-    "--hidden-import", "jarvis.speech.voice_io",
-    "--hidden-import", "faiss",
-    "--hidden-import", "sentence_transformers",
-    "--hidden-import", "tavily",
-    "--hidden-import", "ddgs",
+$common = @(
+    "--onefile", "--noconfirm", "--clean",
     "--collect-all", "jarvis",
-    "src/jarvis/cli/main.py"
-)
+    "--add-data", "configs;configs",
+    "--add-data", "app.py;.",
+    "--add-data", "prompts.py;.",
+    "--add-data", "client.py;.",
+    "--icon", "assets/icon.ico"
+) + $hiddenArgs
 
-if ($OneFile) {
-    $pyInstallerArgs = @("--onefile") + $pyInstallerArgs
-    Write-Host "  Building ONEFILE - fixes disappearing, single exe contains all deps" -ForegroundColor Green
-} else {
-    $pyInstallerArgs = @("--onedir") + $pyInstallerArgs
-    Write-Host "  Building ONEDIR - may cause disappearing if MSI only packages exe without _internal" -ForegroundColor Yellow
-}
+& $PythonExe -m PyInstaller @common --name jarvis --console src/jarvis/cli/main.py
+if ($LASTEXITCODE -ne 0) { Die "jarvis.exe build failed" }
+Ok "dist\jarvis.exe $([math]::Round((Get-Item dist/jarvis.exe).Length / 1MB, 1)) MB"
 
-# Check if icon exists, if not skip
-if (-not (Test-Path "assets/icon.ico")) {
-    $pyInstallerArgs = $pyInstallerArgs | Where-Object { $_ -ne "assets/icon.ico" -and $_ -ne "--icon" }
-    Write-Host "  No icon.ico found, building without icon" -ForegroundColor Yellow
-}
+& $PythonExe -m PyInstaller @common --name jarvis-desktop --windowed src/jarvis/cli/desktop_gui.py
+if ($LASTEXITCODE -ne 0) { Die "jarvis-desktop.exe build failed" }
+Ok "dist\jarvis-desktop.exe $([math]::Round((Get-Item dist/jarvis-desktop.exe).Length / 1MB, 1)) MB"
 
-Write-Host "  Running: pyinstaller $($pyInstallerArgs -join ' ')" -ForegroundColor Gray
-& $PythonExe -m PyInstaller @pyInstallerArgs
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "  PyInstaller failed!" -ForegroundColor Red
-    exit 1
-}
-
-if ($OneFile) {
-    Write-Host "  EXE built at dist/jarvis.exe (onefile - no disappearing)" -ForegroundColor Green
-} else {
-    Write-Host "  EXE built at dist/jarvis/ (onedir - need heat harvesting for MSI)" -ForegroundColor Green
-}
-
-# 4. Build MSI with WiX if available
-if ($wixFound) {
-    Write-Host "`n[5/6] Building MSI with WiX (onefile fixes disappearing)..." -ForegroundColor Cyan
-
-    $wxsFile = "deploy/windows/jarvis.wxs"
-    if (-not (Test-Path $wxsFile)) {
-        Write-Host "  ERROR: $wxsFile not found" -ForegroundColor Red
-        exit 1
-    }
-
-    # Update version in WXS
-    $wxsContent = Get-Content $wxsFile -Raw
-    $wxsContent = $wxsContent -replace 'Version="0\.0\.0"', "Version=`"$Version`""
-    $wxsContent | Set-Content "$wxsFile.tmp" -Encoding UTF8
-
-    if ($OneFile) {
-        # Simple WXS for onefile - single exe, no missing deps, fixes disappearing
-        $simpleWxs = @"
-<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="JARVIS - SHILATECH - Personal AI" Language="1033" Version="$Version" Manufacturer="SHILATECH" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH Local-first Personal AI Voice Hybrid - Fixes disappearing" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-    <MediaTemplate EmbedCab="yes" />
-    <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
-      <ComponentRef Id="MainExecutable" />
-      <ComponentRef Id="PathEnv" />
-      <ComponentRef Id="StartMenuShortcut" />
-    </Feature>
-    <UIRef Id="WixUI_InstallDir" />
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH">
-          <Component Id="MainExecutable" Guid="*">
-            <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
-          </Component>
-        </Directory>
-      </Directory>
-      <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH">
-          <Component Id="StartMenuShortcut" Guid="*">
-            <Shortcut Id="ApplicationStartMenuShortcut" Name="JARVIS SHILATECH" Description="Personal AI, Voice speaks online/offline, Good Morning Eugene" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER"/>
-            <Shortcut Id="UninstallProduct" Name="Uninstall JARVIS" Description="Uninstall JARVIS SHILATECH" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]"/>
-            <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
-            <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
-          </Component>
-        </Directory>
-      </Directory>
-    </Directory>
-    <DirectoryRef Id="TARGETDIR">
-      <Component Id="PathEnv" Guid="*">
-        <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
-        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes"/>
-      </Component>
-    </DirectoryRef>
-  </Product>
-</Wix>
-"@
-        $simpleWxs | Out-File -FilePath "$wxsFile.tmp" -Encoding utf8
-    }
-
-    # Compile
-    & candle.exe "$wxsFile.tmp" -o deploy/windows/jarvis.wixobj -arch x64
+# ----------------------------------------------------------------- 6. the gate
+if (-not $SkipSelftest) {
+    Step 6 "Proving the executable contains the complete code"
+    $report = & dist\jarvis.exe selftest --json
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  candle.exe failed" -ForegroundColor Red
-        exit 1
+        Write-Host $report
+        Die "INCOMPLETE BUILD — modules listed in the manifest are missing from jarvis.exe"
     }
+    $parsed = ($report -join "`n") | ConvertFrom-Json
+    Ok "$($parsed.modules_ok)/$($parsed.modules_expected) modules importable inside the exe"
+} else {
+    Step 6 "Skipping the completeness gate"
+}
 
-    & light.exe deploy/windows/jarvis.wixobj -o "dist/JARVIS-$Version-x64.msi" -ext WixUIExtension -cultures:en-us
+# ---------------------------------------------------------------- 7. payload
+if (-not $NoPayload) {
+    Step 7 "Staging the complete source payload"
+    & $PythonExe deploy/windows/stage_payload.py --out dist/payload --verify
+    if ($LASTEXITCODE -ne 0) { Die "payload staging failed" }
+    $count = (Get-ChildItem -Recurse -File dist/payload).Count
+    Ok "$count files staged into dist\payload"
+} else {
+    Step 7 "Skipping the source payload"
+    New-Item -ItemType Directory -Force -Path dist/payload | Out-Null
+    "payload omitted (-NoPayload)" | Out-File dist/payload/PAYLOAD.txt -Encoding ascii
+}
+
+# --------------------------------------------------------------------- 8. MSI
+if ($wixBin -or (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+    Step 8 "Building the MSI"
+
+    # heat turns the staged tree into components. -gg/-g1 give stable, brace-free
+    # GUIDs; -srd keeps the payload rooted at INSTALLFOLDER rather than adding a
+    # directory level; -sreg because there is nothing to harvest from a source tree.
+    & heat.exe dir dist\payload -cg PayloadComponents -dr INSTALLFOLDER `
+        -gg -g1 -sfrag -srd -sreg -var var.PayloadDir `
+        -out obj\payload.wxs
+    if ($LASTEXITCODE -ne 0) { Die "heat.exe failed" }
+    Ok "payload harvested"
+
+    & candle.exe -arch x64 -dVersion=$Version -dPayloadDir=dist\payload `
+        deploy\windows\jarvis.wxs obj\payload.wxs -out obj\
+    if ($LASTEXITCODE -ne 0) { Die "candle.exe failed" }
+
+    $msi = "dist\JARVIS-$Version-x64.msi"
+    & light.exe obj\jarvis.wixobj obj\payload.wixobj -ext WixUIExtension -cultures:en-us -out $msi
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  light with UI ext failed, trying without" -ForegroundColor Yellow
-        & light.exe deploy/windows/jarvis.wixobj -o "dist/JARVIS-$Version-x64.msi" -cultures:en-us
+        Warn "light failed with validation — retrying with ICE validation off"
+        & light.exe obj\jarvis.wixobj obj\payload.wixobj -ext WixUIExtension -cultures:en-us -sval -out $msi
     }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  light.exe failed" -ForegroundColor Red
-        exit 1
-    }
+    if ($LASTEXITCODE -ne 0) { Die "light.exe failed" }
 
-    Write-Host "  MSI built: dist/JARVIS-$Version-x64.msi (onefile - fixes disappearing)" -ForegroundColor Green
-    Remove-Item "$wxsFile.tmp" -Force
+    Ok "$msi $([math]::Round((Get-Item $msi).Length / 1MB, 1)) MB"
 } else {
-    Write-Host "`n[5/6] Skipping MSI (WiX not found), EXE only" -ForegroundColor Yellow
+    Step 8 "Skipping MSI — WiX not available"
 }
 
-# 5. Create portable ZIP
-Write-Host "`n[6/6] Creating portable ZIP..." -ForegroundColor Cyan
-if ($OneFile) {
-    Compress-Archive -Path dist/jarvis.exe -DestinationPath "dist/JARVIS-$Version-onefile.zip" -Force
-    Write-Host "  ZIP onefile: dist/JARVIS-$Version-onefile.zip" -ForegroundColor Green
-} else {
-    Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-$Version-portable.zip" -Force
-    Write-Host "  ZIP: dist/JARVIS-$Version-portable.zip" -ForegroundColor Green
-}
+# -------------------------------------------------------------------- 9. zips
+Step 9 "Packaging portable archives"
+Compress-Archive -Path dist/jarvis.exe, dist/jarvis-desktop.exe `
+    -DestinationPath "dist/JARVIS-$Version-onefile.zip" -Force
+Compress-Archive -Path dist/payload/* `
+    -DestinationPath "dist/JARVIS-$Version-source.zip" -Force
+Ok "portable archives written"
 
-Write-Host "`n=== Build complete SHILATECH v$Version ===" -ForegroundColor Green
-if ($OneFile) {
-    Write-Host "  EXE: dist/jarvis.exe (onefile - fixes disappearing)" -ForegroundColor Green
-} else {
-    Write-Host "  EXE: dist/jarvis/jarvis.exe (onedir - may need heat for MSI)" -ForegroundColor Yellow
-}
-if ($wixFound) {
-    Write-Host "  MSI: dist/JARVIS-$Version-x64.msi (SHILATECH, fixes disappearing)" -ForegroundColor Green
-}
-Write-Host "`nTo install:" -ForegroundColor Cyan
-Write-Host "  1. Run MSI installer, or"
-Write-Host "  2. Unzip portable and add to PATH, or"
-Write-Host "  3. Run: python -m pip install -e . && python app.py  # Always works, no disappearing"
-Write-Host "`nIf still disappearing:" -ForegroundColor Yellow
-Write-Host "  - Run from CMD: jarvis.exe --help to see error"
-Write-Host "  - Use python app.py (Tkinter stays open)"
-Write-Host "  - Frontend: cd frontend && npm run dev -> http://localhost:5173"
-Write-Host "  - See docs/DISAPPEARING_FIX.md"
+Write-Host "`n=== JARVIS SHILATECH v$Version built ===" -ForegroundColor Green
+Get-ChildItem dist -File | Select-Object Name, @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } } | Format-Table
+Write-Host "After installing, confirm it is complete with:" -ForegroundColor Cyan
+Write-Host '  "C:\Program Files\JARVIS SHILATECH\jarvis.exe" selftest --strict'

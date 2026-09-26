@@ -1,5 +1,9 @@
 name: Build Windows MSI Light (Fast)
 
+# The quick one: server extras only, so a test installer is ready in a few
+# minutes. Same script, same completeness gate and same source payload as the
+# full build — only the optional Python extras differ.
+
 on:
   push:
     tags:
@@ -7,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version"
+        description: "Version (blank = read from the manifest)"
         required: false
-        default: "0.1.9.3"
+        default: ""
 
 jobs:
   build-light:
@@ -29,121 +33,49 @@ jobs:
           choco install wixtoolset --no-progress -y
           echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install deps (lightweight)
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyinstaller==6.10.0
-          python -m pip install -e .[server]
-
-      - name: Build EXE (onefile - modern circular HUD + voice auto-init)
-        run: |
-          python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.tools.network_tools --hidden-import jarvis.core.network --hidden-import jarvis.engine.auto_engine --hidden-import jarvis.agents.ironman --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico
-          python -m PyInstaller --onefile --name jarvis-desktop --windowed src/jarvis/cli/desktop_gui.py --collect-all jarvis --add-data "configs;configs" --add-data "app.py;." --add-data "prompts.py;." --add-data "client.py;." --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico --noconfirm
-          dir dist
-          Write-Host "=== Verify app.py bundled ==="
-          python -c "import pathlib; print(list(pathlib.Path('dist').glob('*')))"
-          # Check that jarvis-desktop.exe exists and size > 10MB
-          if (Test-Path dist/jarvis-desktop.exe) { Write-Host "jarvis-desktop.exe OK $((Get-Item dist/jarvis-desktop.exe).Length / 1MB) MB" } else { Write-Error "jarvis-desktop.exe missing!" }
-
-      - name: Build MSI (onefile - modern circular HUD SHILATECH v0.1.9.8)
+      - name: Work out the version
+        id: version
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.9.8" }
-          Write-Host "Building MSI v$version SHILATECH - modern circular HUD 13 72 ticks 60 segments voice auto-init"
-          $wxs = @"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-            <Product Id="*" Name="JARVIS - SHILATECH - Personal AI" Language="1033" Version="$version" Manufacturer="SHILATECH" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH Modern Circular HUD 13 72 ticks 60 segments voice auto-init" />
-              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." AllowSameVersionUpgrades="yes" />
-              <MediaTemplate EmbedCab="yes" />
-              <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
-                <ComponentRef Id="MainExecutable" />
-                <ComponentRef Id="DesktopExecutable" />
-                <ComponentRef Id="PathEnv" />
-                <ComponentRef Id="StartMenuShortcuts" />
-              </Feature>
-              <UIRef Id="WixUI_InstallDir" />
-              <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-              <Directory Id="TARGETDIR" Name="SourceDir">
-                <Directory Id="ProgramFiles64Folder">
-                  <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH">
-                    <Component Id="MainExecutable" Guid="*">
-                      <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
-                    </Component>
-                    <Component Id="DesktopExecutable" Guid="*">
-                      <File Id="JarvisDesktopExe" Source="dist\jarvis-desktop.exe" />
-                    </Component>
-                  </Directory>
-                </Directory>
-                <Directory Id="ProgramMenuFolder">
-                  <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH">
-                    <Component Id="StartMenuShortcuts" Guid="*">
-                      <Shortcut Id="DesktopShortcut" Name="JARVIS Desktop SHILATECH" Description="GUI stays open - Good Morning Eugene + voice" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" />
-                      <Shortcut Id="ChatShortcut" Name="JARVIS Chat" Description="CLI chat interactive" Target="[INSTALLFOLDER]jarvis.exe" Arguments="chat --interactive" WorkingDirectory="INSTALLFOLDER" />
-                      <Shortcut Id="DoctorShortcut" Name="JARVIS Doctor" Description="System check" Target="[INSTALLFOLDER]jarvis.exe" Arguments="doctor" WorkingDirectory="INSTALLFOLDER" />
-                      <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
-                      <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
-                    </Component>
-                  </Directory>
-                </Directory>
-              </Directory>
-              <DirectoryRef Id="TARGETDIR">
-                <Component Id="PathEnv" Guid="*">
-                  <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
-                  <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes" />
-                </Component>
-              </DirectoryRef>
-            </Product>
-          </Wix>
-          "@
-          $wxs | Out-File -FilePath "simple.wxs" -Encoding utf8
-          candle.exe simple.wxs -o simple.wixobj -arch x64
-          light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -ext WixUIExtension -cultures:en-us
-          if ($LASTEXITCODE -ne 0) { light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -cultures:en-us }
-          dir dist
+          $v = "${{ github.event.inputs.version }}"
+          if (-not $v) { $v = "${{ github.ref_name }}" -replace '^v', '' }
+          if ($v -notmatch '^\d+(\.\d+){0,3}$') {
+            $line = Select-String -Path src/jarvis/_manifest.py -Pattern '^VERSION = "(.+)"' | Select-Object -First 1
+            $v = $line.Matches[0].Groups[1].Value
+          }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "building version $v"
 
-      - name: Create Python portable ZIP (guaranteed no disappearing)
+      - name: Manifest is current
+        # A stale manifest means the build is packaging yesterday's module list,
+        # which is exactly how a new feature misses the installer.
+        run: python deploy/gen_manifest.py --check
+
+      - name: Build EXE + MSI (complete payload, gated by selftest)
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.9.3" }
-          New-Item -ItemType Directory -Force -Path "python-portable/JARVIS"
-          Copy-Item -Recurse -Force src python-portable/JARVIS/
-          Copy-Item -Force app.py,client.py,prompts.py,pyproject.toml,README.md,INSTALL.md python-portable/JARVIS/
-          Copy-Item -Recurse -Force configs python-portable/JARVIS/
-          Copy-Item -Recurse -Force docs python-portable/JARVIS/
-          @'
-          @echo off
-          echo JARVIS SHILATECH Desktop GUI - stays open - Good Morning Eugene
-          python --version
-          python -c "import tkinter; print('Tkinter OK - GUI will stay open')"
-          python -m pip install -e .[server,memory,tools-search,voice] --break-system-packages 2>nul
-          python app.py
-          pause
-          '@ | Out-File -FilePath "python-portable/JARVIS/RUN-DESKTOP-GUI.bat" -Encoding ascii
-          @'
-          @echo off
-          echo JARVIS SHILATECH Chat - stays open - interactive
-          python -m pip install -e .[server,memory,tools-search,voice] --break-system-packages 2>nul
-          python -m jarvis.cli.main chat --interactive
-          pause
-          '@ | Out-File -FilePath "python-portable/JARVIS/RUN-CLI-CHAT.bat" -Encoding ascii
-          Compress-Archive -Path python-portable/JARVIS -DestinationPath "dist/JARVIS-$version-PYTHON-PORTABLE-GUI.zip" -Force
-          Compress-Archive -Path python-portable/JARVIS -DestinationPath "dist/JARVIS-PYTHON-PORTABLE-GUI.zip" -Force
-          dir dist
+          .\deploy\windows\build_msi.ps1 -Version ${{ steps.version.outputs.version }} -Light
+
+      - name: Prove the installed payload is complete
+        shell: pwsh
+        run: |
+          # The exe passed its own gate during the build; this is the payload the
+          # MSI carries — the part that used to be missing entirely.
+          $files = (Get-ChildItem -Recurse -File dist/payload).Count
+          Write-Host "payload files in the installer: $files"
+          if ($files -lt 100) { throw "payload looks truncated ($files files)" }
+          Get-ChildItem dist -File | Format-Table Name, Length
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: jarvis-windows-light
+          name: jarvis-windows-light-${{ steps.version.outputs.version }}
           path: |
             dist/*.msi
             dist/*.zip
             dist/jarvis.exe
             dist/jarvis-desktop.exe
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/')
