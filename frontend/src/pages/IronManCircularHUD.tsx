@@ -17,6 +17,9 @@ export default function IronManCircularHUD() {
   const [showDecision, setShowDecision] = useState(false);
   const [forcedMode, setForcedMode] = useState<"auto" | "full" | "basic">("auto");
   const [decisionLog, setDecisionLog] = useState<string>("");
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -222,6 +225,45 @@ export default function IronManCircularHUD() {
     return () => cancelAnimationFrame(animId);
   }, []);
 
+  const speak = (text: string) => {
+    if (!voiceEnabled) return;
+    if (!('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text.slice(0, 400).replace(/```.*?```/gs, " ").replace(/[*#`]/g, ""));
+      utter.rate = 1.0;
+      utter.pitch = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const british = voices.find(v => v.name.toLowerCase().includes('british') || v.name.toLowerCase().includes('uk') || v.name.toLowerCase().includes('google uk'));
+      if (british) utter.voice = british;
+      utter.onstart = () => setIsSpeaking(true);
+      utter.onend = () => setIsSpeaking(false);
+      utter.onerror = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(utter);
+    } catch {}
+  };
+
+  const toggleListen = () => {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      setDecisionLog("Speech recognition not available in this browser, Sir. Type instead. SHILATECH voice uses browser offline API.");
+      return;
+    }
+    const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => setIsListening(false);
+    rec.onresult = (e: any) => {
+      const t = e.results[0][0].transcript;
+      setInput(t);
+      send(t);
+    };
+    rec.onerror = () => setIsListening(false);
+    rec.start();
+  };
+
   const send = async (text?: string) => {
     const prompt = text || input;
     if (!prompt.trim()) return;
@@ -234,9 +276,13 @@ export default function IronManCircularHUD() {
         body: JSON.stringify({ prompt, agent: "ironman", engine: "auto" }),
       });
       const data = await res.json();
-      setMessages(m => [...m, { role: "assistant", content: data.content || "Error, Sir." }]);
+      const reply = data.content || "Error, Sir.";
+      setMessages(m => [...m, { role: "assistant", content: reply }]);
+      speak(reply);
     } catch {
-      setMessages(m => [...m, { role: "assistant", content: "Comms down, Sir. Running offline mock — always works." }]);
+      const fallback = "Comms down, Sir. Running offline mock — always works. SHILATECH secure.";
+      setMessages(m => [...m, { role: "assistant", content: fallback }]);
+      speak(fallback);
     }
   };
 
@@ -449,6 +495,8 @@ export default function IronManCircularHUD() {
                     Arc reactor at {arcPower.toFixed(1)}% — {online ? "Online full stack" : "Offline basic"} — {online ? "All systems nominal, data secure, encrypted channel" : "Local only, nothing leaves device, secure"}.
                     <br/><br/>
                     <span className={online ? "text-emerald-400" : "text-amber-400"}>{online ? "🌐 ONLINE MODE — Full stack" : "📴 OFFLINE MODE — Basic"} — Same interface, Sir. {online ? "Prompt sent to OpenAI API only if you set key, else Ollama local stays private." : "Nothing leaves device, offline mock."}</span>
+                    <br/><br/>
+                    <span className="text-cyan-400">🔊 Voice: {voiceEnabled ? "ON — JARVIS speaks both online & offline, Sir. Browser speechSynthesis offline + pyttsx3/kokoro offline backend" : "OFF"} • 🎤 Mic: click to speak — offline browser API</span>
                   </div>
                 )}
                 {messages.map((m, i) => (
@@ -465,6 +513,8 @@ export default function IronManCircularHUD() {
                   placeholder={`Ask JARVIS... (Good morning ${userName}, network_status, hybrid_mode, brain dump...)`}
                   className="flex-1 bg-black/80 border border-cyan-900/30 rounded px-3 py-1.5 text-[11px] text-cyan-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-700"
                 />
+                <button onClick={toggleListen} title="Voice input — offline browser API, works offline too, Sir" className={`px-3 py-1.5 rounded border text-[11px] font-bold ${isListening ? "bg-red-600 text-white border-red-500 animate-pulse" : "bg-black border-cyan-800 text-cyan-400 hover:bg-cyan-950"}`}>{isListening ? "● LISTENING" : "🎤"}</button>
+                <button onClick={() => setVoiceEnabled(v => !v)} title={voiceEnabled ? "Voice ON — JARVIS speaks both online/offline" : "Voice OFF"} className={`px-2 py-1.5 rounded border text-[10px] ${voiceEnabled ? (isSpeaking ? "bg-emerald-600 text-black border-emerald-500 animate-pulse" : "bg-emerald-950/50 border-emerald-700 text-emerald-400") : "bg-black border-slate-700 text-slate-500"}`}>{voiceEnabled ? (isSpeaking ? "🔊 SPEAKING" : "🔊 VOICE ON") : "🔇"}</button>
                 <button onClick={() => send()} className="px-4 py-1.5 rounded bg-cyan-600 text-black text-[11px] font-bold hover:bg-cyan-500">TRANSMIT</button>
               </div>
             </div>
