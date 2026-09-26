@@ -1,6 +1,6 @@
 """JARVIS — Personal AI, On Personal Devices."""
 
-__version__ = "0.1.10.1"
+__version__ = "0.1.10.2"
 
 from jarvis.core.types import AgentResponse, Message, ToolCall
 

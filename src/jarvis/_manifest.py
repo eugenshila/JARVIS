@@ -5,7 +5,7 @@ modules (the classic "the MSI doesn't contain the complete code" failure) fails 
 instead of silently degrading to a stub UI.
 """
 
-VERSION = "0.1.10.1"
+VERSION = "0.1.10.2"
 
 #: Every jarvis.* module that must be importable in a complete build.
 MODULES = [

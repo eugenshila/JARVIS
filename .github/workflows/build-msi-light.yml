@@ -124,7 +124,10 @@ jobs:
           # release. Identical names meant the last job to finish silently
           # replaced the other, and the 43 MB installer people actually want
           # for a quick test was always the one that lost.
-          foreach ($f in Get-ChildItem dist/*.msi, dist/*.zip) {
+          # Only the two that differ between the builds. The source payload is
+          # byte-identical in both, so it keeps its name and either job may
+          # publish it.
+          foreach ($f in Get-ChildItem dist/*-x64.msi, dist/*-onefile.zip) {
             $new = $f.Name -replace '\.(msi|zip)$', '-lite.$1'
             Rename-Item $f.FullName $new
             Write-Host "::notice::published as $new"
