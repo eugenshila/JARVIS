@@ -157,11 +157,11 @@ class AutoEngine(BaseEngine):
                 try:
                     from jarvis.engine.openai import MockEngine
                     mock = MockEngine(model="mock")
-                    resp = mock.chat(messages, tools=tools, **kwargs)
+                    resp = mock.generate(messages, **kwargs) if hasattr(mock, "generate") else mock.chat(messages, tools=tools, **kwargs)
                     resp.content = f"⚠️ **{status['selected']['engine']} failed: {e} — Fallback to mock**\n\n{resp.content}"
                     return resp
                 except Exception as e2:
-                    return AgentResponse(content=f"Auto engine failed: {e}, fallback also failed: {e2}", finished=True)
+                    return AgentResponse(content=f"Auto engine failed: {e}, fallback also failed: {e2}\n\nFix: ollama serve + ollama pull tinyllama, or set OPENAI_API_KEY, or use --engine mock, Sir. SHILATECH", finished=True)
             else:
                 return AgentResponse(content=f"Auto engine (mock) failed: {e}", finished=True)
 

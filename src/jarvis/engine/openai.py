@@ -36,6 +36,10 @@ class OpenAICompatibleEngine(BaseEngine):
             "max_tokens": self.config.max_tokens,
         }
 
+    def chat(self, messages: list[Message], tools=None, **kwargs) -> AgentResponse:
+        # Compatibility: chat calls generate
+        return self.generate(messages, **kwargs)
+
     def generate(self, messages: list[Message], **kwargs) -> AgentResponse:
         import urllib.request
         import urllib.error

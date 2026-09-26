@@ -514,7 +514,7 @@ class CircularHUDApp(tk.Tk):
             if not status['network']['online']:
                 self.add_message('system', f"Offline, Sir — already Basic Local. Nothing leaves device. SHILATECH secure. {status['selected']['engine']} {status['selected']['mode']}")
                 return
-            res = tool._run(action='decide', choice=choice)
+            res = tool.run(action='decide', choice=choice)
             self.add_message('system', res[:800])
             if choice == '2':
                 self._forced_mode = "basic"
