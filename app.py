@@ -288,84 +288,192 @@ class CircularHUDApp(tk.Tk):
             self.canvas.delete("all")
             cx = cy = self.canvas_size // 2
             rot = self._rot
-            base = 220
+            base = 240
 
-            # Background
+            # Background with subtle grid
             self.canvas.create_rectangle(0, 0, self.canvas_size, self.canvas_size, fill="#020208", outline="")
+            # Grid lines
+            for i in range(0, self.canvas_size, 40):
+                self.canvas.create_line(i, 0, i, self.canvas_size, fill="#0a0a0f", width=1)
+                self.canvas.create_line(0, i, self.canvas_size, i, fill="#0a0a0f", width=1)
 
-            # Outer housing 2 rings
-            self.canvas.create_oval(cx-base-20, cy-base-20, cx+base+20, cy+base+20, outline="#1e293b", width=2)
-            self.canvas.create_oval(cx-base-10, cy-base-10, cx+base+10, cy+base+10, outline="#0e7490", width=1)
+            # Outer housing 2 rings - chrome like screenshot
+            self.canvas.create_oval(cx-base-30, cy-base-30, cx+base+30, cy+base+30, outline="#1e293b", width=3)
+            self.canvas.create_oval(cx-base-20, cy-base-20, cx+base+20, cy+base+20, outline="#334155", width=1)
+            self.canvas.create_oval(cx-base-12, cy-base-12, cx+base+12, cy+base+12, outline="#0e7490", width=1)
 
-            # 72 tick marks like screenshot
+            # 72 tick marks like screenshot - major every 6 with numbers
             for i in range(72):
-                angle = (i / 72) * 2 * math.pi
+                angle = (i / 72) * 2 * math.pi - math.pi/2
                 is_major = i % 6 == 0
-                r1 = base + (10 if is_major else 5)
-                r2 = base + (18 if is_major else 12)
+                r1 = base + (12 if is_major else 6)
+                r2 = base + (22 if is_major else 14)
                 x1 = cx + math.cos(angle) * r1
                 y1 = cy + math.sin(angle) * r1
                 x2 = cx + math.cos(angle) * r2
                 y2 = cy + math.sin(angle) * r2
-                color = "#22d3ee" if is_major else "#334155"
+                color = "#22d3ee" if is_major else "#475569"
                 width = 2 if is_major else 1
                 self.canvas.create_line(x1, y1, x2, y2, fill=color, width=width)
+                if is_major:
+                    # Number label
+                    rx = cx + math.cos(angle) * (r2 + 12)
+                    ry = cy + math.sin(angle) * (r2 + 12)
+                    self.canvas.create_text(rx, ry, text=str(i), fill="#334155", font=("JetBrains Mono", 6))
 
-            # 16 segmented middle ring rotating
-            for i in range(16):
-                angle = (i / 16) * 2 * math.pi + rot * 0.02
-                seg_len = 0.3
-                r = base - 20
+            # 60 small rectangular segments - outer segmented ring like screenshot (more modern)
+            for i in range(60):
+                angle = (i / 60) * 2 * math.pi + rot * 0.01
+                r = base - 8
+                seg_w = 4
+                # Small rectangle as line with thickness
+                x1 = cx + math.cos(angle) * (r - seg_w)
+                y1 = cy + math.sin(angle) * (r - seg_w)
+                x2 = cx + math.cos(angle) * (r + seg_w)
+                y2 = cy + math.sin(angle) * (r + seg_w)
+                alpha = 0.3 + 0.7 * (math.sin(rot*0.05 + i*0.2) * 0.5 + 0.5)
+                color = "#0891b2" if i % 3 == 0 else "#0e7490"
+                if alpha > 0.6:
+                    self.canvas.create_line(x1, y1, x2, y2, fill=color, width=2)
+
+            # 24 larger blocks middle ring - like screenshot segmented blocks
+            for i in range(24):
+                angle = (i / 24) * 2 * math.pi + rot * 0.015
+                seg_len = 0.18
+                r = base - 28
                 x1 = cx + math.cos(angle) * r
                 y1 = cy + math.sin(angle) * r
                 x2 = cx + math.cos(angle + seg_len) * r
                 y2 = cy + math.sin(angle + seg_len) * r
-                self.canvas.create_line(x1, y1, x2, y2, fill="#0891b2", width=3)
+                # Alternate colors for modern look
+                color = "#22d3ee" if i % 4 == 0 else "#0e7490" if i % 2 == 0 else "#1e3a5f"
+                width = 4 if i % 4 == 0 else 2
+                self.canvas.create_line(x1, y1, x2, y2, fill=color, width=width)
+                # Small gap
+                # Add small dot at end
+                self.canvas.create_oval(x2-1, y2-1, x2+1, y2+1, fill=color, outline="")
 
-            # Inner blue glowing ring with shadow
-            # Simulate glow with multiple ovals
-            for glow in range(3):
-                self.canvas.create_oval(cx-base+40+glow*2, cy-base+40+glow*2, cx+base-40-glow*2, cy+base-40-glow*2, outline="#22d3ee", width=1)
+            # 16 segmented inner ring rotating opposite - more modern
+            for i in range(16):
+                angle = (i / 16) * 2 * math.pi - rot * 0.02
+                seg_len = 0.25
+                r = base - 50
+                x1 = cx + math.cos(angle) * r
+                y1 = cy + math.sin(angle) * r
+                x2 = cx + math.cos(angle + seg_len) * r
+                y2 = cy + math.sin(angle + seg_len) * r
+                color = "#7dd3fc" if i % 2 == 0 else "#22d3ee"
+                self.canvas.create_line(x1, y1, x2, y2, fill=color, width=3)
 
-            self.canvas.create_oval(cx-base+40, cy-base+40, cx+base-40, cy+base-40, outline="#22d3ee", width=3)
+            # Inner blue glowing ring with multi-layer glow - modern like screenshot
+            # Glow layers
+            for glow in range(6):
+                alpha = 1 - glow*0.15
+                width = 6 - glow
+                r = base - 70 - glow*1.5
+                # Use stipple for glow effect
+                self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r, outline="#22d3ee", width=1)
 
-            # 3 rotating energy prongs gradient white->cyan
+            self.canvas.create_oval(cx-base+70, cy-base+70, cx+base-70, cy+base-70, outline="#22d3ee", width=3)
+            # Inner glow ring
+            self.canvas.create_oval(cx-base+75, cy-base+75, cx+base-75, cy+base-75, outline="#7dd3fc", width=1, dash=(2,4))
+
+
+            # 3 rotating energy prongs gradient white->cyan - more modern with glow and inner lines
             for i in range(3):
                 angle = (i / 3) * 2 * math.pi + rot * 0.05
-                r1 = 30
-                r2 = base - 60
+                r1 = 35
+                r2 = base - 85
                 x1 = cx + math.cos(angle) * r1
                 y1 = cy + math.sin(angle) * r1
                 x2 = cx + math.cos(angle) * r2
                 y2 = cy + math.sin(angle) * r2
-                self.canvas.create_line(x1, y1, x2, y2, fill="#ffffff", width=2)
-                # Glow
-                self.canvas.create_line(x1, y1, x2, y2, fill="#22d3ee", width=4, stipple="gray50")
+                # Outer glow
+                self.canvas.create_line(x1, y1, x2, y2, fill="#0e7490", width=6)
+                # Main prong white->cyan gradient simulated with 2 lines
+                self.canvas.create_line(x1, y1, x2, y2, fill="#22d3ee", width=3)
+                self.canvas.create_line(x1, y1, x2, y2, fill="#ffffff", width=1)
+                # Small circle at end
+                self.canvas.create_oval(x2-4, y2-4, x2+4, y2+4, fill="#22d3ee", outline="#ffffff", width=1)
+                # Inner line
+                mid_r = (r1 + r2) / 2
+                mx = cx + math.cos(angle) * mid_r
+                my = cy + math.sin(angle) * mid_r
+                self.canvas.create_oval(mx-2, my-2, mx+2, my+2, fill="#7dd3fc", outline="")
 
-            # Inner core pulsing blue 28±4
-            pulse = 28 + math.sin(rot * 0.1) * 4
-            self.canvas.create_oval(cx-pulse, cy-pulse, cx+pulse, cy+pulse, fill="#22d3ee", outline="#ffffff", width=1)
-            self.canvas.create_oval(cx-10, cy-10, cx+10, cy+10, fill="white", outline="")
+            # Additional 6 small prongs for more modern look like screenshot
+            for i in range(6):
+                angle = (i / 6) * 2 * math.pi + rot * 0.03
+                r1 = base - 70
+                r2 = base - 55
+                x1 = cx + math.cos(angle) * r1
+                y1 = cy + math.sin(angle) * r1
+                x2 = cx + math.cos(angle) * r2
+                y2 = cy + math.sin(angle) * r2
+                self.canvas.create_line(x1, y1, x2, y2, fill="#334155", width=1)
 
-            # Number 13 like screenshot
-            self.canvas.create_text(cx, cy, text="13", fill="black", font=("JetBrains Mono", 14, "bold"))
+            # Inner core pulsing blue 28±4 - more modern with multiple layers like screenshot
+            pulse = 28 + math.sin(rot * 0.08) * 4
+            # Outer glow core
+            for g in range(4):
+                r = pulse + g*3
+                self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r, outline="#22d3ee", width=1)
+            self.canvas.create_oval(cx-pulse, cy-pulse, cx+pulse, cy+pulse, fill="#22d3ee", outline="#7dd3fc", width=2)
+            # Inner white core
+            self.canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill="white", outline="#22d3ee", width=1)
+            self.canvas.create_oval(cx-6, cy-6, cx+6, cy+6, fill="#7dd3fc", outline="")
 
-            # Inner small ring 45px
+            # Number 13 like screenshot - more prominent
+            self.canvas.create_text(cx, cy, text="13", fill="black", font=("JetBrains Mono", 12, "bold"))
+
+            # Inner small rings - multiple like screenshot for modern look
             self.canvas.create_oval(cx-45, cy-45, cx+45, cy+45, outline="#e2e8f0", width=1)
+            self.canvas.create_oval(cx-55, cy-55, cx+55, cy+55, outline="#334155", width=1, dash=(3,3))
+            self.canvas.create_oval(cx-35, cy-35, cx+35, cy+35, outline="#0e7490", width=1)
 
-            # 4 data points around
-            for i in range(4):
-                angle = (i / 4) * 2 * math.pi + rot * 0.03
-                r = base - 110
+            # 8 data points around - more like screenshot
+            for i in range(8):
+                angle = (i / 8) * 2 * math.pi + rot * 0.02
+                r = base - 120
                 x = cx + math.cos(angle) * r
                 y = cy + math.sin(angle) * r
-                self.canvas.create_oval(x-3, y-3, x+3, y+3, fill="#22d3ee", outline="")
+                color = "#22d3ee" if i % 2 == 0 else "#7dd3fc"
+                size = 3 if i % 2 == 0 else 2
+                self.canvas.create_oval(x-size, y-size, x+size, y+size, fill=color, outline="")
+                # Small line outward
+                x2 = cx + math.cos(angle) * (r + 8)
+                y2 = cy + math.sin(angle) * (r + 8)
+                self.canvas.create_line(x, y, x2, y2, fill="#334155", width=1)
 
-            # Overlays like screenshot — left/right data
-            self.canvas.create_text(80, 80, text="99% - Strength\nHome WiFi - Source", fill="#0e7490", font=("JetBrains Mono", 8), justify="left")
-            self.canvas.create_text(80, 140, text="Jarvis list\n• backup themes\n• backup control\n• warning control", fill="#334155", font=("JetBrains Mono", 6), justify="left")
+            # Overlays like screenshot — left/right data - more modern and detailed
+            # Left side
+            self.canvas.create_text(70, 60, text="99% - Strength", fill="#22d3ee", font=("JetBrains Mono", 8, "bold"), anchor="w")
+            self.canvas.create_text(70, 75, text="Home WiFi - Source", fill="#64748b", font=("JetBrains Mono", 7), anchor="w")
+            self.canvas.create_text(70, 95, text="Jarvis list", fill="#475569", font=("JetBrains Mono", 7), anchor="w")
+            self.canvas.create_text(70, 110, text="• backup themes
+• backup control
+• warning control
+• system diagnostics
+• network status", fill="#334155", font=("JetBrains Mono", 6), justify="left", anchor="w")
+            self.canvas.create_text(70, 170, text="SYSTEM • ONLINE
+Engine: OLLAMA
+Mode: FULL STACK
+Latency: 33ms
+SHILATECH SECURE", fill="#0e7490", font=("JetBrains Mono", 6), justify="left", anchor="w")
 
-            self.canvas.create_text(self.canvas_size-80, 100, text="WEATHER • NAIROBI\n56°F\nPartly Cloudy\nHigh 74° • Low 60°", fill="#7dd3fc", font=("JetBrains Mono", 8), justify="left")
+            # Right side - weather like screenshot more modern
+            self.canvas.create_text(self.canvas_size-70, 60, text="WEATHER • NAIROBI", fill="#0e7490", font=("JetBrains Mono", 7), anchor="e")
+            self.canvas.create_text(self.canvas_size-70, 80, text="56°F", fill="#7dd3fc", font=("JetBrains Mono", 16, "bold"), anchor="e")
+            self.canvas.create_text(self.canvas_size-70, 95, text="Partly Cloudy", fill="#cbd5e1", font=("JetBrains Mono", 8), anchor="e")
+            self.canvas.create_text(self.canvas_size-70, 108, text="High 74° • Low 60°", fill="#64748b", font=("JetBrains Mono", 7), anchor="e")
+            self.canvas.create_text(self.canvas_size-70, 125, text="Precipitation: 10%
+Humidity: 65%
+Wind: 5 mph
+SHILATECH", fill="#475569", font=("JetBrains Mono", 6), justify="right", anchor="e")
+
+            # Bottom extra data like screenshot
+            self.canvas.create_text(cx, self.canvas_size-20, text="Trash - 44 items • Size - 248.95 MB • Source - AC Line • Power - 90% • ONLINE SECURE • ENCRYPTED • 33ms • SHILATECH", fill="#334155", font=("JetBrains Mono", 7))
+
 
             self._rot += 1
             self._arc_power = 94 + random.random() * 6
@@ -627,6 +735,16 @@ What would you like to do first, Sir?
 SHILATECH • Malibu Point 10880"""
 
             self.add_message("assistant", msg)
+            # Voice initialization - auto-speak Good Morning with TTS both online/offline
+            try:
+                if getattr(self, 'voice_enabled', True):
+                    voice_text = f"{greeting}, {self.user_name}. It's {time_str} on {date_str}. Arc reactor at {self._arc_power:.1f} percent. All systems nominal. Lab secure. Today's alignment {len(self.mits)} MITs to make today a win. SHILATECH secure. I speak both online and offline, Sir."
+                    self.after(1500, lambda: self.speak(voice_text))
+                    if logging:
+                        logging.info("Voice auto-initialized, speaking Good Morning: %s", voice_text[:80])
+            except Exception as ve:
+                if logging:
+                    logging.error("Voice auto-speak failed: %s", ve)
         except Exception as e:
             if logging:
                 logging.error("good_morning failed: %s", e)
@@ -690,12 +808,82 @@ System: All nominal. Arc reactor {self._arc_power:.1f}%. Lab secure. SHILATECH.
             if logging:
                 logging.error("send_prompt failed: %s", e)
 
+    def speak(self, text):
+        # Voice speaks both online/offline - pyttsx3 offline + Windows SAPI
+        if not getattr(self, 'voice_enabled', True):
+            return
+        try:
+            # Try pyttsx3 offline
+            import pyttsx3
+            def tts_thread():
+                try:
+                    engine = pyttsx3.init()
+                    engine.setProperty('rate', 180)
+                    # Try British voice
+                    voices = engine.getProperty('voices')
+                    for v in voices:
+                        if 'british' in v.name.lower() or 'uk' in v.name.lower() or 'english' in v.name.lower():
+                            engine.setProperty('voice', v.id)
+                            break
+                    # Clean text for speech
+                    clean = text[:400].replace('```',' ').replace('*','').replace('#','').replace('•','').replace('—',' ')
+                    engine.say(clean)
+                    engine.runAndWait()
+                except Exception as e:
+                    if logging:
+                        logging.error("TTS pyttsx3 failed: %s", e)
+                    # Fallback to Windows SAPI via win32com
+                    try:
+                        import win32com.client
+                        speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                        speaker.Speak(text[:400])
+                    except:
+                        try:
+                            import subprocess
+                            subprocess.run(["espeak", text[:400]], timeout=5)
+                        except:
+                            pass
+            threading.Thread(target=tts_thread, daemon=True).start()
+            if logging:
+                logging.info("Speaking: %s", text[:100])
+        except Exception as e:
+            if logging:
+                logging.error("Speak failed: %s", e)
+            # Fallback: try Windows PowerShell SAPI
+            try:
+                import subprocess
+                ps_cmd = f'Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak("{text[:200].replace(chr(34), "")}");'
+                threading.Thread(target=lambda: subprocess.run(["powershell", "-Command", ps_cmd], timeout=10), daemon=True).start()
+            except:
+                pass
+
     def voice_input(self):
-        self.add_message("system", "Voice input — mock in desktop, Sir. In frontend circular HUD real mic works via Web Audio API + SpeechRecognition.\n\nClick 🎤 in HUD to speak: 'Good morning Eugene'\n\nFor desktop real voice: pip install faster-whisper + kokoro + sounddevice")
+        self.add_message("system", "🎤 Voice input — listening, Sir. SHILATECH voice uses offline API.\n\nIn frontend circular HUD real mic works via Web Audio API + SpeechRecognition browser offline.\n\nDesktop: pip install faster-whisper + sounddevice for real mic, or type.\n\nTry: 'Good morning Eugene', 'network_status', 'hybrid_mode interactive'")
+        # Try real STT if available
+        try:
+            from jarvis.speech.voice_io import VoiceIO
+            vio = VoiceIO()
+            self.add_message("system", f"STT: {vio.stt_engine} — TTS: {vio.tts_engine} — VoiceIO ready, Sir. Say something...")
+            def listen_thread():
+                try:
+                    text = vio.listen(timeout=5, phrase_time_limit=5)
+                    if text:
+                        self.after(0, lambda: self.send_prompt(text))
+                except Exception as e:
+                    self.after(0, lambda: self.add_message("system", f"Listen failed: {e}, type instead, Sir."))
+            threading.Thread(target=listen_thread, daemon=True).start()
+        except Exception as e:
+            self.add_message("system", f"Voice deps missing: {e}. Install: pip install -e .[voice] for faster-whisper offline. For now type, Sir.")
 
     def toggle_voice(self):
         self.voice_enabled = not getattr(self, 'voice_enabled', True)
-        self.add_message("system", f"Voice {'ON' if self.voice_enabled else 'OFF'} — JARVIS speaks both online & offline, Sir. {'Browser speechSynthesis offline + pyttsx3/kokoro offline backend' if self.voice_enabled else 'Muted'}")
+        status = f"Voice {'ON 🔊' if self.voice_enabled else 'OFF 🔇'} — JARVIS speaks both online & offline, Sir."
+        self.add_message("system", status + f"\n\n{'Browser speechSynthesis offline + pyttsx3/kokoro offline backend speaks' if self.voice_enabled else 'Muted — click again to enable'}")
+        if self.voice_enabled:
+            self.speak(f"Voice enabled, Sir. Good morning {self.user_name}. Circular HUD online, SHILATECH secure. I speak both online and offline.")
+        if logging:
+            logging.info("Voice toggled: %s", self.voice_enabled)
+
 
 
 def main():

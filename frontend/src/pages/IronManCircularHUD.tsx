@@ -26,6 +26,24 @@ export default function IronManCircularHUD() {
       setTime(new Date());
       setArcPower(p => 94 + Math.random() * 6);
     }, 1000);
+    // Voice auto-init - speak Good morning on load like desktop
+    setTimeout(() => {
+      if (voiceEnabled && 'speechSynthesis' in window) {
+        const now = new Date();
+        const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
+        const msg = `${greeting}, ${userName}. It's ${now.toLocaleTimeString()} on ${now.toLocaleDateString()}. Arc reactor at ${arcPower.toFixed(1)} percent. Circular HUD online, SHILATECH secure. I speak both online and offline, Sir.`;
+        try {
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance(msg);
+          const voices = window.speechSynthesis.getVoices();
+          const british = voices.find(v => v.name.toLowerCase().includes('british') || v.name.toLowerCase().includes('uk'));
+          if (british) utter.voice = british;
+          utter.onstart = () => setIsSpeaking(true);
+          utter.onend = () => setIsSpeaking(false);
+          window.speechSynthesis.speak(utter);
+        } catch {}
+      }
+    }, 1500);
     return () => clearInterval(id);
   }, []);
 
@@ -123,19 +141,55 @@ export default function IronManCircularHUD() {
         ctx.stroke();
       }
 
-      // Middle segmented ring — like screenshot outer segments
-      const midR = base - 35;
-      for (let i = 0; i < 16; i++) {
-        const angle = (i / 16) * Math.PI * 2 + rot * 0.3;
-        const gap = 0.15;
-        ctx.strokeStyle = `rgba(6, 182, 212, ${0.4 + Math.sin(rot + i) * 0.2})`;
-        ctx.lineWidth = 8;
+      // Modern segmented rings like second screenshot - more detailed
+      // 60 small segments outer
+      const outerSegR = base - 8;
+      for (let i = 0; i < 60; i++) {
+        const angle = (i / 60) * Math.PI * 2 + rot * 0.2;
+        const gap = 0.02;
+        const alpha = 0.2 + 0.6 * (Math.sin(rot*2 + i*0.3) * 0.5 + 0.5);
+        if (alpha > 0.4) {
+          ctx.strokeStyle = `rgba(6, 182, 212, ${alpha})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, outerSegR, angle + gap, angle + Math.PI / 30 - gap);
+          ctx.stroke();
+        }
+      }
+
+      // 24 larger blocks middle - like screenshot
+      const midR = base - 28;
+      for (let i = 0; i < 24; i++) {
+        const angle = (i / 24) * Math.PI * 2 + rot * 0.25;
+        const gap = 0.08;
+        ctx.strokeStyle = i % 4 === 0 ? `rgba(34, 211, 238, ${0.8 + Math.sin(rot*3 + i)*0.2})` : `rgba(6, 182, 212, ${0.4 + Math.sin(rot + i) * 0.2})`;
+        ctx.lineWidth = i % 4 === 0 ? 6 : 3;
         ctx.beginPath();
-        ctx.arc(cx, cy, midR, angle + gap, angle + Math.PI / 8 - gap);
+        ctx.arc(cx, cy, midR, angle + gap, angle + Math.PI / 12 - gap);
         ctx.stroke();
       }
 
-      // Inner blue glowing ring — main reactor ring
+      // 16 segmented inner ring rotating opposite - more modern
+      const innerSegR = base - 50;
+      for (let i = 0; i < 16; i++) {
+        const angle = (i / 16) * Math.PI * 2 - rot * 0.3;
+        const gap = 0.15;
+        ctx.strokeStyle = `rgba(125, 211, 252, ${0.5 + Math.sin(rot*2 + i) * 0.3})`;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, innerSegR, angle + gap, angle + Math.PI / 8 - gap);
+        ctx.stroke();
+      }
+
+      // Inner blue glowing ring — main reactor ring - more modern with multi-glow like second screenshot
+      // Multi-layer glow
+      for (let g = 0; g < 5; g++) {
+        ctx.strokeStyle = `rgba(6, 182, 212, ${0.15 - g*0.02})`;
+        ctx.lineWidth = 12 - g*2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, base - 70 - g*2, 0, Math.PI*2);
+        ctx.stroke();
+      }
       ctx.strokeStyle = `rgba(6, 182, 212, ${0.9 + Math.sin(rot * 3) * 0.1})`;
       ctx.lineWidth = 3;
       ctx.shadowColor = "#06b6d4";
