@@ -26,8 +26,28 @@ import sys
 import os
 import threading
 import traceback
+import logging
 from pathlib import Path
 from datetime import datetime
+
+# Setup logging to file to debug disappearing issue
+try:
+    log_dir = Path.home() / ".jarvis"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "jarvis.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    logging.info("JARVIS Desktop starting - SHILATECH v0.1.9.4 - logging to %s", log_file)
+except Exception as e:
+    print(f"Logging setup failed: {e}")
+    logging = None
+
 
 ROOT = Path(__file__).parent
 SRC = ROOT / "src"
@@ -70,10 +90,28 @@ except ImportError:
 class IronManHUDApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("J.A.R.V.I.S — MARK XLII — Personal AI — Hybrid Online/Offline")
+        self.title("J.A.R.V.I.S — MARK XLII — SHILATECH — Personal AI — Hybrid Online/Offline — Voice — Stays Open")
         self.geometry("1250x780")
         self.minsize(1000, 600)
         self.configure(bg="#020208")
+        # Prevent disappearing: handle close button, keep window alive
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self._is_closing = False
+        self._keep_alive_id = None
+        # Log uncaught exceptions
+        def log_excepthook(exc_type, exc_value, exc_traceback):
+            err = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            try:
+                if logging:
+                    logging.error("Uncaught exception: %s", err)
+                print(f"Uncaught exception: {err}")
+            except:
+                pass
+            try:
+                messagebox.showerror("JARVIS Error - But Staying Open", f"Error occurred but JARVIS stays open, Sir:\n{exc_value}\n\nSee ~/.jarvis/jarvis.log\n\n{err[:500]}")
+            except:
+                pass
+        sys.excepthook = log_excepthook
 
         self.user_name = self.load_name()
         self.mits = self.load_mits()
@@ -306,6 +344,7 @@ class IronManHUDApp(tk.Tk):
         self.update_clock()
         self.after(500, self.good_morning)
         self.after(1000, self.check_online)
+        self.after(60000, self.keep_alive)  # Keep-alive prevents disappearing
 
     def load_name(self):
         try:
@@ -378,12 +417,85 @@ class IronManHUDApp(tk.Tk):
         self.status_var.set(f"Task added: {text}")
 
     def update_clock(self):
-        now = datetime.now()
-        self.time_label.config(text=now.strftime("%H:%M:%S %Y-%m-%d"))
-        import random
-        power = 97 + random.uniform(-0.5, 0.8)
-        self.arc_label.config(text=f"◉ {power:.1f}%")
-        self.after(1000, self.update_clock)
+        try:
+            if getattr(self, '_is_closing', False):
+                return
+            now = datetime.now()
+            if hasattr(self, 'time_label') and self.time_label.winfo_exists():
+                self.time_label.config(text=now.strftime("%H:%M:%S %Y-%m-%d"))
+            import random
+            power = 97 + random.uniform(-0.5, 0.8)
+            if hasattr(self, 'arc_label') and self.arc_label.winfo_exists():
+                self.arc_label.config(text=f"◉ {power:.1f}%")
+            if 'logging' in globals() and logging:
+                logging.debug("Clock tick %s", now)
+        except Exception as e:
+            try:
+                if 'logging' in globals() and logging:
+                    logging.error("update_clock failed: %s", e)
+            except:
+                pass
+        finally:
+            try:
+                if not getattr(self, '_is_closing', False):
+                    self.after(1000, self.update_clock)
+            except:
+                pass
+
+    def on_close(self):
+        try:
+            if 'logging' in globals() and logging:
+                logging.info("Close requested - user clicked X")
+            result = messagebox.askyesnocancel(
+                "JARVIS SHILATECH - Stay Open?",
+                "JARVIS is about to close, Sir.\n\nYes = Quit\nNo = Minimize to taskbar (stays running)\nCancel = Stay open\n\nIf window disappears after a while, check ~/.jarvis/jarvis.log and docs/DISAPPEARING_FIX.md"
+            )
+            if result is None:
+                if 'logging' in globals() and logging:
+                    logging.info("Close cancelled - staying open")
+                return
+            elif result is False:
+                if 'logging' in globals() and logging:
+                    logging.info("Minimizing to taskbar, not closing")
+                self.iconify()
+                self.status_var.set("Minimized to taskbar — JARVIS still running, Sir. Click taskbar to restore.")
+                return
+            else:
+                if 'logging' in globals() and logging:
+                    logging.info("User confirmed quit")
+                self._is_closing = True
+                self.quit()
+                self.destroy()
+        except Exception as e:
+            try:
+                if 'logging' in globals() and logging:
+                    logging.error("on_close failed: %s", e)
+            except:
+                pass
+
+    def keep_alive(self):
+        try:
+            if getattr(self, '_is_closing', False):
+                return
+            if 'logging' in globals() and logging:
+                logging.info("Keep-alive ping - JARVIS still running, Sir.")
+            try:
+                if not self.winfo_viewable():
+                    if 'logging' in globals() and logging:
+                        logging.warning("Window not viewable, deiconifying")
+                    self.deiconify()
+            except:
+                pass
+        except Exception as e:
+            if 'logging' in globals() and logging:
+                logging.error("keep_alive failed: %s", e)
+        finally:
+            try:
+                if not getattr(self, '_is_closing', False):
+                    self._keep_alive_id = self.after(60000, self.keep_alive)
+            except:
+                pass
+
 
     def decide_mode(self, choice):
         try:
@@ -409,6 +521,8 @@ class IronManHUDApp(tk.Tk):
     def check_online(self):
         def worker():
             try:
+                if getattr(self, '_is_closing', False):
+                    return
                 if HAS_JARVIS:
                     JarvisConfig, get_agent, list_agents, list_engines, EngineType, list_tools, get_auto_status = IMPORTS
                     status = get_auto_status()
