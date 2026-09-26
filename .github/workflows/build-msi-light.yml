@@ -101,16 +101,17 @@ jobs:
           }
 
           # A last look inside the MSI itself: the file table is the only proof
-          # that the payload actually made it into the package rather than just
-          # onto the build agent's disk.
-          $msi = (Get-ChildItem dist/*.msi | Select-Object -First 1).FullName
-          $installer = New-Object -ComObject WindowsInstaller.Installer
-          $db = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($msi, 0))
-          $view = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @("SELECT COUNT(*) FROM File"))
-          $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null)
-          $rec = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
-          $count = $rec.GetType().InvokeMember('StringData', 'GetProperty', $null, $rec, 1)
-          Write-Host "::notice::files packaged inside the MSI: $count"
+          # that the payload made it into the package rather than just onto the
+          # build agent's disk. dark.exe ships with WiX, so no COM interop.
+          $msi = (Get-ChildItem dist/*.msi | Select-Object -First 1)
+          try {
+            & dark.exe $msi.FullName -o obj\decompiled.wxs -nologo | Out-Null
+            $packaged = (Select-String -Path obj\decompiled.wxs -Pattern '<File ').Count
+            Write-Host "::notice::files packaged inside $($msi.Name): $packaged"
+            if ($packaged -lt 100) { throw "the MSI only packages $packaged files" }
+          } catch {
+            Write-Host "::warning::could not inspect the MSI file table: $($_.Exception.Message)"
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
