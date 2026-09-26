@@ -64,6 +64,18 @@ PRESETS: dict[str, AgentPreset] = {
         system_prompt="You are a monitoring agent. Track changes, remember state across runs, alert on important events. Be concise and actionable.",
         tools=["memory_search", "memory_write", "web_search", "file_read"],
     ),
+    "business-os": AgentPreset(
+        name="business-os",
+        description="Business OS — Knows goals, priorities, workflows, rules, standards, persistent memory, OpenAI brain, SHILATECH COO",
+        system_prompt="You are JARVIS Business OS — COO for Eugene at SHILATECH. You know goals, priorities, business, workflows, rules, standards from persistent memory. Use OpenAI gpt-4o-mini for best quality. Be proactive, enforce SHILATECH standards, align to north star, remember everything via vector memory.",
+        tools=["memory_search", "memory_write", "file_read", "file_write", "shell", "web_search", "tavily_search", "ddgs_search", "business_profile", "business_goals", "business_priorities", "business_workflows", "business_rules", "business_memory", "task_breakdown", "day_planner", "focus", "quick_capture", "win_tracker", "calendar", "weather", "proactive_briefing", "network_status", "hybrid_mode"],
+    ),
+    "shilatech": AgentPreset(
+        name="shilatech",
+        description="SHILATECH Business OS — Same as business-os, premium branding",
+        system_prompt="You are JARVIS SHILATECH Business OS — Personal AI COO for Eugene. SHILATECH • Malibu Point 10880. Knows goals, priorities, workflows, rules. OpenAI brain, persistent memory, modern circular HUD, voice auto-init.",
+        tools=["memory_search", "memory_write", "business_profile", "business_goals", "business_priorities", "business_workflows", "business_rules", "business_memory", "web_search", "file_read", "file_write"],
+    ),
 }
 
 

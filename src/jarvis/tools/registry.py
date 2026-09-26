@@ -213,6 +213,29 @@ if HAS_NETWORK:
         "hybrid_mode": HybridModeTool,
     })
 
+try:
+    from jarvis.tools.business_tools import (
+        BusinessProfileTool,
+        BusinessGoalsTool,
+        BusinessPrioritiesTool,
+        BusinessWorkflowsTool,
+        BusinessRulesTool,
+        BusinessMemoryTool,
+    )
+    HAS_BUSINESS = True
+except ImportError:
+    HAS_BUSINESS = False
+
+if HAS_BUSINESS:
+    REGISTRY.update({
+        "business_profile": BusinessProfileTool,
+        "business_goals": BusinessGoalsTool,
+        "business_priorities": BusinessPrioritiesTool,
+        "business_workflows": BusinessWorkflowsTool,
+        "business_rules": BusinessRulesTool,
+        "business_memory": BusinessMemoryTool,
+    })
+
 
 def get_tool(name: str) -> BaseTool | None:
     cls = REGISTRY.get(name)

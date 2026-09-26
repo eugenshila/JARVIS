@@ -890,5 +890,20 @@ def weather(location: str):
         console.print("[red]Weather tool not available[/]")
 
 
+# Business OS group
+try:
+    from jarvis.cli.business import business as business_group
+    cli.add_command(business_group)
+except ImportError as e:
+    @cli.group()
+    def business():
+        """Business OS — (failed to load: {e})"""
+        pass
+
+    @business.command(name="init")
+    def business_init_fallback():
+        console.print("[red]Business OS failed to load. Check src/jarvis/cli/business.py[/]")
+
+
 if __name__ == "__main__":
     cli()

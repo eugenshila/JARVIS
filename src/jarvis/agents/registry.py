@@ -21,6 +21,12 @@ try:
 except ImportError:
     HAS_ADHD = False
 
+try:
+    from jarvis.agents.business_os import BusinessOSAgent
+    HAS_BUSINESS_OS = True
+except ImportError:
+    HAS_BUSINESS_OS = False
+
 REGISTRY: dict[str, type[BaseAgent]] = {
     "simple": SimpleAgent,
     "chat-simple": SimpleAgent,
@@ -45,6 +51,16 @@ if HAS_ADHD:
         "adhd": ADHDCoachAgent,
         "coach": ADHDCoachAgent,
         "focus": ADHDCoachAgent,
+    })
+
+if HAS_BUSINESS_OS:
+    REGISTRY.update({
+        "business_os": BusinessOSAgent,
+        "business": BusinessOSAgent,
+        "shilatech": BusinessOSAgent,
+        "shilatech_os": BusinessOSAgent,
+        "business-os": BusinessOSAgent,
+        "coo": BusinessOSAgent,
     })
 
 
