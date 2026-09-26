@@ -9,7 +9,7 @@ on:
       version:
         description: "Version (e.g., 0.1.0)"
         required: false
-        default: "0.1.0"
+        default: "0.1.9.3"
 
 jobs:
   build-windows:
@@ -29,34 +29,39 @@ jobs:
           choco install wixtoolset --no-progress -y
           echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install deps (full, may be heavy)
+      - name: Install deps (full)
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller==6.10.0
           python -m pip install -e .[server,memory,tools-search]
           # Note: [all] includes vllm which doesn't work on Windows, so use subset
 
-      - name: Build EXE (full)
+      - name: Build EXE (onefile for MSI - fixes disappearing)
         run: |
-          python -m PyInstaller --onedir --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import faiss --hidden-import sentence_transformers --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools
+          # OneFile for MSI - single exe contains all deps, no missing DLLs -> no disappearing
+          python -m PyInstaller --onefile --name jarvis --console --icon assets/icon.ico src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import faiss --hidden-import sentence_transformers --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.tools.network_tools --hidden-import jarvis.core.network --hidden-import jarvis.engine.auto_engine --hidden-import jarvis.agents.ironman --hidden-import jarvis.agents.adhd_coach --hidden-import jarvis.tools.adhd_tools --hidden-import jarvis.tools.adhd_advanced --hidden-import jarvis.tools.calendar_tools --hidden-import jarvis.tools.email_tools --hidden-import jarvis.tools.focus_enhanced --hidden-import jarvis.tools.face_tool --hidden-import jarvis.tools.startup_tools --hidden-import jarvis.tools.device_tools --hidden-import jarvis.connectors.google --hidden-import jarvis.startup.autostart --hidden-import jarvis.startup.daemon --hidden-import jarvis.startup.greeting --hidden-import jarvis.speech.voice_io
           dir dist
 
-      - name: Build MSI (simple robust method)
+      - name: Build EXE (onedir for portable ZIP)
+        run: |
+          python -m PyInstaller --onedir --name jarvis-portable --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import faiss --hidden-import sentence_transformers --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools
+          dir dist
+
+      - name: Build MSI (onefile - fixes disappearing issue)
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
           if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
-          if (-not $version) { $version = "0.1.0" }
-          Write-Host "Building MSI version $version"
-          # Use simple WXS without heat for reliability (heat fails with many files)
+          if (-not $version) { $version = "0.1.9.3" }
+          Write-Host "Building MSI version $version - ONEFILE fixes disappearing"
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-            <Product Id="*" Name="JARVIS - Personal AI" Language="1033" Version="$version" Manufacturer="JARVIS" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS Local-first Personal AI" />
+            <Product Id="*" Name="JARVIS - SHILATECH - Personal AI" Language="1033" Version="$version" Manufacturer="SHILATECH" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH Local-first Personal AI Voice Hybrid" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
               <MediaTemplate EmbedCab="yes" />
-              <Feature Id="ProductFeature" Title="JARVIS" Level="1">
+              <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
                 <ComponentRef Id="MainExecutable" />
                 <ComponentRef Id="PathEnv" />
                 <ComponentRef Id="StartMenuShortcut" />
@@ -67,14 +72,15 @@ jobs:
                 <Directory Id="ProgramFiles64Folder">
                   <Directory Id="INSTALLFOLDER" Name="JARVIS">
                     <Component Id="MainExecutable" Guid="*">
-                      <File Id="JarvisExe" Source="dist\jarvis\jarvis.exe" KeyPath="yes" />
+                      <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
                     </Component>
                   </Directory>
                 </Directory>
                 <Directory Id="ProgramMenuFolder">
-                  <Directory Id="ApplicationProgramsFolder" Name="JARVIS">
+                  <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH">
                     <Component Id="StartMenuShortcut" Guid="*">
-                      <Shortcut Id="AppShortcut" Name="JARVIS" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" />
+                      <Shortcut Id="AppShortcut" Name="JARVIS SHILATECH" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" Description="JARVIS SHILATECH Personal AI - Voice speaks online/offline" />
+                      <Shortcut Id="AppShortcutCLI" Name="JARVIS CLI" Target="[INSTALLFOLDER]jarvis.exe" Arguments="ask --engine auto --interactive &quot;Good morning Eugene&quot;" WorkingDirectory="INSTALLFOLDER" Description="JARVIS CLI Good Morning Eugene" />
                       <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
                       <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
                     </Component>
@@ -99,12 +105,13 @@ jobs:
           }
           dir dist
 
-      - name: Create portable ZIP
+      - name: Create portable ZIPs
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.0" }
-          Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-$version-portable.zip" -Force
-          Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-portable.zip" -Force
+          if (-not $version) { $version = "0.1.9.3" }
+          Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-$version-portable.zip" -Force
+          Compress-Archive -Path dist/jarvis.exe -DestinationPath "dist/JARVIS-$version-onefile.zip" -Force
+          Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-portable.zip" -Force
           dir dist
 
       - name: Upload artifacts
@@ -114,7 +121,8 @@ jobs:
           path: |
             dist/*.msi
             dist/*.zip
-            dist/jarvis/jarvis.exe
+            dist/jarvis.exe
+            dist/jarvis-portable/jarvis-portable.exe
           if-no-files-found: warn
 
       - name: Release

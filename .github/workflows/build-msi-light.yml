@@ -9,7 +9,7 @@ on:
       version:
         description: "Version"
         required: false
-        default: "0.1.6"
+        default: "0.1.9.3"
 
 jobs:
   build-light:
@@ -35,26 +35,26 @@ jobs:
           python -m pip install pyinstaller==6.10.0
           python -m pip install -e .[server]
 
-      - name: Build EXE (onefile CLI + windowed GUI)
+      - name: Build EXE (onefile - fixes disappearing, single exe contains all deps)
         run: |
-          python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico
+          python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.tools.network_tools --hidden-import jarvis.core.network --hidden-import jarvis.engine.auto_engine --hidden-import jarvis.agents.ironman --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico
           python -m PyInstaller --onefile --name jarvis-desktop --windowed src/jarvis/cli/desktop_gui.py --collect-all jarvis --add-data "configs;configs" --add-data "app.py;." --add-data "prompts.py;." --add-data "client.py;." --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico --noconfirm
           dir dist
 
-      - name: Build MSI (simple, only 2 exes, no batch files)
+      - name: Build MSI (onefile - fixes disappearing, SHILATECH)
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.6" }
-          Write-Host "Building MSI v$version"
+          if (-not $version) { $version = "0.1.9.3" }
+          Write-Host "Building MSI v$version SHILATECH - onefile fixes disappearing"
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-            <Product Id="*" Name="JARVIS - Personal AI" Language="1033" Version="$version" Manufacturer="JARVIS" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS - Use Desktop shortcut for GUI that stays open" />
+            <Product Id="*" Name="JARVIS - SHILATECH - Personal AI" Language="1033" Version="$version" Manufacturer="SHILATECH" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH - Desktop GUI stays open, voice speaks online/offline" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
               <MediaTemplate EmbedCab="yes" />
-              <Feature Id="ProductFeature" Title="JARVIS" Level="1">
+              <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
                 <ComponentRef Id="MainExecutable" />
                 <ComponentRef Id="DesktopExecutable" />
                 <ComponentRef Id="PathEnv" />
@@ -64,7 +64,7 @@ jobs:
               <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
               <Directory Id="TARGETDIR" Name="SourceDir">
                 <Directory Id="ProgramFiles64Folder">
-                  <Directory Id="INSTALLFOLDER" Name="JARVIS">
+                  <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH">
                     <Component Id="MainExecutable" Guid="*">
                       <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
                     </Component>
@@ -74,10 +74,10 @@ jobs:
                   </Directory>
                 </Directory>
                 <Directory Id="ProgramMenuFolder">
-                  <Directory Id="ApplicationProgramsFolder" Name="JARVIS">
+                  <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH">
                     <Component Id="StartMenuShortcuts" Guid="*">
-                      <Shortcut Id="DesktopShortcut" Name="JARVIS Desktop" Description="GUI that stays open" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" />
-                      <Shortcut Id="ChatShortcut" Name="JARVIS Chat" Description="CLI chat" Target="[INSTALLFOLDER]jarvis.exe" Arguments="chat" WorkingDirectory="INSTALLFOLDER" />
+                      <Shortcut Id="DesktopShortcut" Name="JARVIS Desktop SHILATECH" Description="GUI stays open - Good Morning Eugene + voice" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" />
+                      <Shortcut Id="ChatShortcut" Name="JARVIS Chat" Description="CLI chat interactive" Target="[INSTALLFOLDER]jarvis.exe" Arguments="chat --interactive" WorkingDirectory="INSTALLFOLDER" />
                       <Shortcut Id="DoctorShortcut" Name="JARVIS Doctor" Description="System check" Target="[INSTALLFOLDER]jarvis.exe" Arguments="doctor" WorkingDirectory="INSTALLFOLDER" />
                       <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
                       <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" />
@@ -100,12 +100,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { light.exe simple.wixobj -o "dist/JARVIS-$version-x64.msi" -cultures:en-us }
           dir dist
 
-      - name: Create Python portable ZIP (guaranteed to work, no EXE)
+      - name: Create Python portable ZIP (guaranteed no disappearing)
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.6" }
-          # Create python portable with batch files
+          if (-not $version) { $version = "0.1.9.3" }
           New-Item -ItemType Directory -Force -Path "python-portable/JARVIS"
           Copy-Item -Recurse -Force src python-portable/JARVIS/
           Copy-Item -Force app.py,client.py,prompts.py,pyproject.toml,README.md,INSTALL.md python-portable/JARVIS/
@@ -113,18 +112,18 @@ jobs:
           Copy-Item -Recurse -Force docs python-portable/JARVIS/
           @'
           @echo off
-          echo JARVIS Desktop GUI - stays open
+          echo JARVIS SHILATECH Desktop GUI - stays open - Good Morning Eugene
           python --version
-          python -c "import tkinter; print('Tkinter OK')"
-          python -m pip install -e .[server] --break-system-packages 2>nul
+          python -c "import tkinter; print('Tkinter OK - GUI will stay open')"
+          python -m pip install -e .[server,memory,tools-search,voice] --break-system-packages 2>nul
           python app.py
           pause
           '@ | Out-File -FilePath "python-portable/JARVIS/RUN-DESKTOP-GUI.bat" -Encoding ascii
           @'
           @echo off
-          echo JARVIS Chat - stays open
-          python -m pip install -e .[server] --break-system-packages 2>nul
-          python -m jarvis.cli.main chat
+          echo JARVIS SHILATECH Chat - stays open - interactive
+          python -m pip install -e .[server,memory,tools-search,voice] --break-system-packages 2>nul
+          python -m jarvis.cli.main chat --interactive
           pause
           '@ | Out-File -FilePath "python-portable/JARVIS/RUN-CLI-CHAT.bat" -Encoding ascii
           Compress-Archive -Path python-portable/JARVIS -DestinationPath "dist/JARVIS-$version-PYTHON-PORTABLE-GUI.zip" -Force
