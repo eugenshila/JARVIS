@@ -33,7 +33,7 @@
   - Security • Your Data panel
   - Quick Protocols
 
-- Top bar: J.A.R.V.I.S MARK XLII + Stark Industries + time/date + ONLINE badge green dot glow / OFFLINE red + USER + ARC power
+- Top bar: J.A.R.V.I.S MARK XLII + SHILATECH + time/date + ONLINE badge green dot glow / OFFLINE red + USER + ARC power
 - Bottom bar: Trash 44 items • Size 248.95 MB • Source AC Line • Power 90% • ONLINE SECURE vs OFFLINE SECURE • time/date
 - Center under circle: chat with Good morning Eugene + hybrid mode note
 
@@ -185,7 +185,43 @@ jarvis hybrid --action set --online-engine ollama --offline-engine ollama
 # LLM stays on your i5-6300U even online, only search queries go online if you use search
 ```
 
-**Data secure, Sir. Same circular interface like your screenshot for both local and online starts — only top badge changes from OFFLINE BASIC to ONLINE FULL STACK.**
+**Interactive When Online — Same Interface, You Decide, Sir:**
+
+New requirement: when online, JARVIS stays interactive like offline mode — you make a decision from HUD or CLI.
+
+**CLI:**
+```bash
+jarvis ask --engine auto --interactive "Good morning Eugene"
+# Shows:
+# 🌐 ONLINE — Interactive Decision — SHILATECH
+# 1. Full Stack Online — openai if OPENAI_API_KEY HTTPS encrypted else ollama local, full search, best quality
+# 2. Basic Offline Local even though online — mock/ollama local, nothing leaves device, private
+# Decide — 1 for Full Stack Online, 2 for Basic Offline Local
+jarvis chat --interactive  # same, plus /mode /online /offline commands inside chat
+
+jarvis ask --agent ironman --engine auto "hybrid_mode interactive"  # tool
+jarvis ask --agent ironman --engine auto "hybrid_mode decide choice 1"  # force full
+jarvis ask --agent ironman --engine auto "hybrid_mode decide choice 2"  # force basic even online
+```
+
+**Tools:**
+- `network_status status` — checks online/offline
+- `hybrid_mode status` — shows auto prefs
+- `hybrid_mode interactive` — returns decision prompt Option1 Full Stack vs Option2 Basic
+- `hybrid_mode decide choice 1` — forces online_engine (full stack)
+- `hybrid_mode decide choice 2` — forces offline_engine even though online (basic local, SHILATECH secure)
+
+**Frontend Circular HUD:**
+- Top bar ONLINE badge is now clickable button: "ONLINE OPENAI • FULL STACK • CLICK TO DECIDE" → opens modal
+- Modal shows 2 cards: 1. FULL STACK ONLINE (green, recommended when online) 2. BASIC OFFLINE LOCAL EVEN THOUGH ONLINE (amber, private)
+- Quick Protocols added DECIDE FULL / DECIDE BASIC buttons
+- Same for IronManHUD — online badge clickable → decision modal
+- When you pick Basic even though online: badge becomes "ONLINE • BASIC LOCAL • SHILATECH" — same circular interface, only badge changes, nothing leaves device
+- When you pick Full: badge "ONLINE FULL STACK" — prompt to OpenAI if key else Ollama local, search online
+
+**Answer to your question:** Yes, when online JARVIS is still interactive as offline mode — you decide from HUD click or CLI --interactive. Same circular interface local and online, only badge changes. SHILATECH branding: SHILATECH • time/date, SHILATECH • Malibu Point 10880.
+
+**Data secure, Sir. Same circular interface like your screenshot for both local and online starts — only top badge changes from OFFLINE BASIC to ONLINE FULL STACK, and you decide interactive when online.**
 
 ---
 

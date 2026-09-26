@@ -191,7 +191,7 @@ class IronManHUDApp(tk.Tk):
         qp_grid.columnconfigure(0, weight=1)
         qp_grid.columnconfigure(1, weight=1)
 
-        tk.Label(left, text="JARVIS v0.1.9 • Hybrid Online/Offline\nLocal-first • Auto Engine • Voice ready\nStark Industries • Malibu Point 10880",
+        tk.Label(left, text="JARVIS v0.1.9 • Hybrid Online/Offline\nLocal-first • Auto Engine • Voice ready\nSHILATECH • Malibu Point 10880",
                  bg="#020208", fg="#475569", font=("JetBrains Mono", 7), justify="left").pack(side="bottom", padx=6, pady=6, anchor="w")
 
         # Center
@@ -246,6 +246,9 @@ class IronManHUDApp(tk.Tk):
         tk.Button(hybrid_frame, text="CHECK ONLINE", command=self.check_online, bg="#020208", fg="#f59e0b", font=("JetBrains Mono", 8), borderwidth=1, relief="solid", padx=6, pady=2).pack(fill="x", pady=2)
         tk.Button(hybrid_frame, text="SET ONLINE=OPENAI OFFLINE=MOCK", command=lambda: self.set_hybrid("openai", "mock"), bg="#020208", fg="#22c55e", font=("JetBrains Mono", 7), borderwidth=1, relief="solid").pack(fill="x", pady=1)
         tk.Button(hybrid_frame, text="SET ONLINE=OLLAMA OFFLINE=OLLAMA", command=lambda: self.set_hybrid("ollama", "ollama"), bg="#020208", fg="#22d3ee", font=("JetBrains Mono", 7), borderwidth=1, relief="solid").pack(fill="x", pady=1)
+        tk.Label(hybrid_frame, text="When online, JARVIS stays interactive — you decide:", bg="#020208", fg="#94a3b8", font=("JetBrains Mono", 7)).pack(anchor="w", pady=(6,2))
+        tk.Button(hybrid_frame, text="1. FULL STACK ONLINE", command=lambda: self.decide_mode("1"), bg="#022c22", fg="#22c55e", font=("JetBrains Mono", 8, "bold"), borderwidth=1, relief="solid").pack(fill="x", pady=1)
+        tk.Button(hybrid_frame, text="2. BASIC OFFLINE LOCAL EVEN ONLINE", command=lambda: self.decide_mode("2"), bg="#422006", fg="#f59e0b", font=("JetBrains Mono", 7, "bold"), borderwidth=1, relief="solid").pack(fill="x", pady=1)
 
         task_frame = tk.Frame(right, bg="#020208", padx=8, pady=8, highlightbackground="#22c55e", highlightthickness=1)
         task_frame.pack(fill="x", padx=6, pady=6)
@@ -295,7 +298,7 @@ class IronManHUDApp(tk.Tk):
         tk.Button(name_frame, text="SET", command=self.save_name, bg="#020208", fg="#22c55e", font=("JetBrains Mono", 7), borderwidth=1, relief="solid", padx=4).pack(side="left")
         tk.Label(pers_frame, text=f"Name used: Good morning {self.user_name}", bg="#020208", fg="#475569", font=("JetBrains Mono", 7)).pack(anchor="w")
 
-        self.status_var = tk.StringVar(value="Ready — Hybrid Online/Offline — Checking network — Stark Industries")
+        self.status_var = tk.StringVar(value="Ready — Hybrid Online/Offline — Checking network — SHILATECH")
         status_bar = tk.Label(self, textvariable=self.status_var, bg="#020208", fg="#22c55e", font=("JetBrains Mono", 8),
                               anchor="w", padx=12, pady=4, highlightbackground="#22c55e", highlightthickness=1)
         status_bar.pack(fill="x", side="bottom")
@@ -381,6 +384,27 @@ class IronManHUDApp(tk.Tk):
         power = 97 + random.uniform(-0.5, 0.8)
         self.arc_label.config(text=f"◉ {power:.1f}%")
         self.after(1000, self.update_clock)
+
+    def decide_mode(self, choice):
+        try:
+            from jarvis.core.network import get_auto_status
+            from jarvis.tools.network_tools import HybridModeTool
+            status = get_auto_status()
+            tool = HybridModeTool()
+            if not status['network']['online']:
+                self.add_message('assistant', f"Offline, Sir — already Basic Local. Nothing leaves device. SHILATECH secure. {status['selected']['engine']} {status['selected']['mode']}")
+                return
+            res = tool._run(action='decide', choice=choice)
+            self.add_message('assistant', res[:500])
+            if choice == '2':
+                self.online_label.config(text='🌐 ONLINE • BASIC LOCAL • SHILATECH — you decided, Sir', fg='#f59e0b')
+                self.status_var.set('Online but Basic Local even though online — private, SHILATECH secure — you decided, Sir')
+            else:
+                self.online_label.config(text=f"🌐 ONLINE {status['selected']['engine'].upper()} FULL STACK — you decided", fg='#22c55e')
+                self.status_var.set('Online Full Stack — you decided, Sir — SHILATECH')
+            self.check_online()
+        except Exception as e:
+            self.add_message('assistant', f"Decide failed: {e}")
 
     def check_online(self):
         def worker():

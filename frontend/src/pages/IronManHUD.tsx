@@ -421,24 +421,25 @@ export default function IronManHUD() {
             <span style={{fontSize:10, opacity:0.6, border:'1px solid #22c55e', padding:'2px 6px', borderRadius:4}}>MARK XLII</span>
           </div>
           <div style={{fontSize:11, opacity:0.7}}>
-            STARK INDUSTRIES • {time.toLocaleTimeString()} • {time.toLocaleDateString()}
+            SHILATECH • {time.toLocaleTimeString()} • {time.toLocaleDateString()}
           </div>
         </div>
         
         <div style={{display:'flex', alignItems:'center', gap:16, fontSize:11}}>
           <div>USER: {userName.toUpperCase()}</div>
           <div style={{display:'flex', alignItems:'center', gap:6}}>
-            <span style={{
+            <button onClick={()=> setShowDecision(v=>!v)} title="Click to decide Full Stack vs Basic — interactive, Sir" style={{
               padding:'3px 8px', 
               background: onlineStatus.online ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)', 
               border:`1px solid ${onlineStatus.online ? '#22c55e' : '#ef4444'}`, 
               borderRadius:4,
               color: onlineStatus.online ? '#22c55e' : '#fca5a5',
-              display:'flex', alignItems:'center', gap:4
+              display:'flex', alignItems:'center', gap:4,
+              cursor:'pointer'
             }}>
               <span style={{width:6, height:6, borderRadius:'50%', background: onlineStatus.online ? '#22c55e' : '#ef4444', display:'inline-block', boxShadow: `0 0 5px ${onlineStatus.online ? '#22c55e' : '#ef4444'}`}} />
-              {onlineStatus.online ? `ONLINE ${onlineStatus.engine.toUpperCase()} ${onlineStatus.latency ? onlineStatus.latency+'ms' : ''}` : 'OFFLINE BASIC'}
-            </span>
+              {forcedMode==='basic' && onlineStatus.online ? `ONLINE BASIC LOCAL • CLICK` : onlineStatus.online ? `ONLINE ${onlineStatus.engine.toUpperCase()} ${onlineStatus.latency ? onlineStatus.latency+'ms' : ''} • FULL • CLICK TO DECIDE` : 'OFFLINE BASIC • SHILATECH'}
+            </button>
             <span style={{padding:'3px 8px', background:'rgba(34,197,94,0.2)', border:'1px solid #22c55e', borderRadius:4, fontSize:9}}>{onlineStatus.mode}</span>
           </div>
           <div style={{display:'flex', gap:8}}>
@@ -452,6 +453,22 @@ export default function IronManHUD() {
         </div>
       </div>
 
+      {showDecision && onlineStatus.online && (
+        <div style={{position:'absolute', top:52, left:'50%', transform:'translateX(-50%)', zIndex:50, width:640, maxWidth:'90vw', border:'1px solid #22c55e', borderRadius:8, background:'rgba(0,0,0,0.9)', backdropFilter:'blur(10px)', padding:16, boxShadow:'0 0 40px rgba(34,197,94,0.3)'}}>
+          <div style={{fontSize:12, letterSpacing:1, color:'#22c55e', marginBottom:12, display:'flex', justifyContent:'space-between'}}><span>ONLINE — INTERACTIVE DECISION — SHILATECH</span><button onClick={()=>setShowDecision(false)} style={{background:'none', border:'none', color:'#666', cursor:'pointer'}}>✕</button></div>
+          <div style={{fontSize:11, opacity:0.7, marginBottom:12}}>Same circular interface, Sir. JARVIS stays interactive like offline — you decide Full Stack vs Basic.</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+            <button onClick={()=>decideMode('1')} style={{border:'1px solid #22c55e', borderRadius:6, padding:12, background:'rgba(34,197,94,0.1)', textAlign:'left', cursor:'pointer', color:'#22c55e'}}>
+              <div style={{fontWeight:800, fontSize:11}}>1. FULL STACK ONLINE</div>
+              <div style={{fontSize:10, opacity:0.7, marginTop:6, color:'#aaa'}}>OpenAI if key set — prompt HTTPS encrypted, best quality, no RAM for i5-6300U 8GB. Or Ollama local — LLM stays device even online, only search online. Badge ONLINE FULL STACK.</div>
+            </button>
+            <button onClick={()=>decideMode('2')} style={{border:'1px solid #eab308', borderRadius:6, padding:12, background:'rgba(234,179,8,0.1)', textAlign:'left', cursor:'pointer', color:'#eab308'}}>
+              <div style={{fontWeight:800, fontSize:11}}>2. BASIC OFFLINE LOCAL EVEN ONLINE</div>
+              <div style={{fontSize:10, opacity:0.7, marginTop:6, color:'#aaa'}}>Nothing leaves device, 100% private, SHILATECH secure. mock or tinyllama 1.1B local. Same interface, only badge changes to BASIC LOCAL.</div>
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{display:'flex', height:'calc(100vh - 52px)', position:'relative', zIndex:1}}>
         {/* Left Panel - Arc Reactor + Systems */}
         <div style={{width:280, borderRight:'1px solid rgba(34,197,94,0.2)', background:'rgba(2,2,8,0.8)', backdropFilter:'blur(10px)', padding:16, display:'flex', flexDirection:'column', gap:16, overflowY:'auto'}}>
@@ -522,7 +539,7 @@ export default function IronManHUD() {
           <div style={{fontSize:9, opacity:0.5, textAlign:'center', lineHeight:1.4, border:'1px solid rgba(34,197,94,0.1)', padding:8, borderRadius:4}}>
             JARVIS v0.1.9 • ADHD Co-Pilot + Iron Man<br/>
             Local-first • FAISS • Voice ready<br/>
-            Stark Industries • Malibu Point 10880
+            SHILATECH • Malibu Point 10880
           </div>
         </div>
 

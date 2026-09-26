@@ -49,7 +49,8 @@ def cli(ctx: click.Context, verbose: bool):
 @click.option("--offline-engine", default=None, help="Offline engine for auto: mock, ollama")
 @click.option("--context", "-c", default="", help="Additional context")
 @click.option("--mock", is_flag=True, help="Use mock engine (offline demo)")
-def ask(prompt: str | None, agent: str | None, engine: str | None, online_engine: str | None, offline_engine: str | None, context: str, mock: bool):
+@click.option("--interactive", is_flag=True, help="Interactive decision when online: Full Stack vs Basic")
+def ask(prompt: str | None, agent: str | None, engine: str | None, online_engine: str | None, offline_engine: str | None, context: str, mock: bool, interactive: bool):
     """Ask JARVIS a question (single-turn)."""
     from jarvis.agents.registry import get_agent
     from jarvis.core.types import EngineType
@@ -75,8 +76,35 @@ def ask(prompt: str | None, agent: str | None, engine: str | None, online_engine
                 from jarvis.core.network import get_auto_status
                 status = get_auto_status()
                 console.print(f"[dim]🌐 Network: {'Online' if status['network']['online'] else 'Offline'} via {status['network']['method']} | Selected: {status['selected']['engine']} — {status['selected']['mode']} | Reason: {status['selected']['reason']}[/]")
-            except:
-                pass
+
+                # Interactive decision when online — stays interactive like offline
+                if interactive and status["network"]["online"]:
+                    console.print(Panel.fit(
+                        f"[bold cyan]🌐 ONLINE — Interactive Decision — SHILATECH[/]\n\n"
+                        f"Network: Online via {status['network']['method']} {status['network'].get('latency_ms','')}ms\n"
+                        f"Current Auto Pick: {status['selected']['engine']} — {status['selected']['mode']}\n\n"
+                        f"[bold]You are online, Sir. JARVIS stays interactive like offline — you decide:[/]\n\n"
+                        f"[green]1. Full Stack Online[/] — {status['prefs']['online_engine']} → best: openai > ollama\n"
+                        f"   • If OPENAI_API_KEY set → openai — prompt to OpenAI API HTTPS, best quality, no RAM for 8GB\n"
+                        f"   • If Ollama running → ollama — LLM stays local even online, only search online\n"
+                        f"   • Full search + memory, best quality\n\n"
+                        f"[yellow]2. Basic Offline Local[/] — {status['prefs']['offline_engine']} → mock/ollama local\n"
+                        f"   • Nothing leaves device, 100% private, SHILATECH secure\n"
+                        f"   • mock always works or ollama tinyllama 1.1B offline\n"
+                        f"   • Same circular interface, only badge changes\n\n"
+                        f"For your i5-6300U 8GB: Online openai best, Offline mock/tinyllama",
+                        border_style="cyan"
+                    ))
+                    choice = click.prompt("Decide — 1 for Full Stack Online, 2 for Basic Offline Local (even though online)", type=click.Choice(["1", "2", "full", "basic", "online", "offline"]), default="1", show_choices=True)
+                    if choice in ["2", "basic", "offline"]:
+                        # Force offline engine even though online
+                        cfg.engine.type = EngineType.MOCK if cfg.auto.offline_engine == "mock" else EngineType(cfg.auto.offline_engine) if cfg.auto.offline_engine in ["ollama", "mock"] else EngineType.MOCK
+                        console.print(f"[yellow]You chose: Basic Offline Local ({cfg.engine.type.value}) even though online — private, local only, Sir.[/]")
+                    else:
+                        console.print(f"[green]You chose: Full Stack Online ({status['selected']['engine']}) — {status['selected']['mode']}, Sir.[/]")
+
+            except Exception as e:
+                console.print(f"[dim]Auto status failed: {e}[/]")
 
     if agent:
         cfg.preset = agent
@@ -104,7 +132,8 @@ def ask(prompt: str | None, agent: str | None, engine: str | None, online_engine
 @click.option("--engine", "-e", default=None, help="Engine type: openai, ollama, mock, auto")
 @click.option("--online-engine", default=None, help="Online engine for auto")
 @click.option("--offline-engine", default=None, help="Offline engine for auto")
-def chat(agent: str | None, engine: str | None, online_engine: str | None, offline_engine: str | None):
+@click.option("--interactive", is_flag=True, help="Interactive decision when online")
+def chat(agent: str | None, engine: str | None, online_engine: str | None, offline_engine: str | None, interactive: bool):
     """Start interactive chat."""
     from jarvis.agents.registry import get_agent
     from jarvis.core.types import EngineType, Message, Role
@@ -118,8 +147,21 @@ def chat(agent: str | None, engine: str | None, online_engine: str | None, offli
     if agent:
         cfg.preset = agent
 
+    if interactive:
+        try:
+            from jarvis.core.network import get_auto_status
+            status = get_auto_status()
+            if status["network"]["online"]:
+                console.print(Panel.fit(f"[bold cyan]ONLINE Interactive — SHILATECH[/] Full Stack vs Basic, Sir. Auto: {status['selected']['engine']} {status['selected']['mode']}", border_style="cyan"))
+                ch = click.prompt("1=Full Stack Online, 2=Basic Offline Local even online", type=click.Choice(["1","2"]), default="1")
+                if ch == "2":
+                    cfg.engine.type = EngineType.MOCK
+                    console.print("[yellow]Basic Offline Local forced even though online, Sir — SHILATECH private.[/]")
+        except Exception as e:
+            console.print(f"[dim]Interactive check: {e}[/]")
+
     ag = get_agent(agent or cfg.preset, config=cfg)
-    console.print(Panel(f"Chatting with [bold]{ag.name}[/] via [cyan]{cfg.engine.type.value}[/] ({cfg.engine.model}). Type /exit to quit, /clear to clear.", title="JARVIS Chat"))
+    console.print(Panel(f"Chatting with [bold]{ag.name}[/] via [cyan]{cfg.engine.type.value}[/] ({cfg.engine.model}). Type /exit /clear /mode /online /offline to quit or decide.", title="JARVIS Chat"))
 
     history: list[Message] = []
     while True:
@@ -139,6 +181,35 @@ def chat(agent: str | None, engine: str | None, online_engine: str | None, offli
             new_agent = user_input.split(" ", 1)[1].strip()
             ag = get_agent(new_agent, config=cfg)
             console.print(f"[dim]Switched to {ag.name}[/]")
+            continue
+        if user_input.strip() in ("/mode", "/online", "/offline", "/decision"):
+            try:
+                from jarvis.core.network import get_auto_status, check_online
+                from jarvis.tools.network_tools import HybridModeTool
+                status = get_auto_status()
+                tool = HybridModeTool()
+                if not status["network"]["online"]:
+                    console.print(Panel.fit(f"[yellow]Offline, Sir — {status['selected']['engine']} {status['selected']['mode']}[/]", border_style="yellow"))
+                else:
+                    if user_input.strip() == "/online":
+                        r = tool._run(action="decide", choice="1")
+                        console.print(Panel(r, title="Full Stack Online", border_style="green"))
+                    elif user_input.strip() == "/offline":
+                        r = tool._run(action="decide", choice="2")
+                        console.print(Panel(r, title="Basic Offline Local", border_style="yellow"))
+                        cfg.engine.type = __import__("jarvis.core.types", fromlist=["EngineType"]).EngineType.MOCK
+                        ag = get_agent(agent or cfg.preset, config=cfg)
+                    else:
+                        r = tool._run(action="interactive")
+                        console.print(Panel(r, title="Interactive Decision SHILATECH", border_style="cyan"))
+                        ch = click.prompt("Decide 1=Full Stack Online 2=Basic Offline Local", type=click.Choice(["1","2"]), default="1")
+                        r2 = tool._run(action="decide", choice=ch)
+                        console.print(Panel(r2, border_style="cyan"))
+                        if ch == "2":
+                            cfg.engine.type = __import__("jarvis.core.types", fromlist=["EngineType"]).EngineType.MOCK
+                            ag = get_agent(agent or cfg.preset, config=cfg)
+            except Exception as e:
+                console.print(f"[red]Decision error: {e}[/]")
             continue
 
         try:

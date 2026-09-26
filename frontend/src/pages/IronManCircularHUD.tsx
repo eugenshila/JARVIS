@@ -14,6 +14,9 @@ export default function IronManCircularHUD() {
   const [weather] = useState({ temp: "56°F", condition: "Partly Cloudy", high: "74°", low: "60°" });
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   const [input, setInput] = useState("");
+  const [showDecision, setShowDecision] = useState(false);
+  const [forcedMode, setForcedMode] = useState<"auto" | "full" | "basic">("auto");
+  const [decisionLog, setDecisionLog] = useState<string>("");
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -237,6 +240,41 @@ export default function IronManCircularHUD() {
     }
   };
 
+  const decide = async (choice: "1" | "2") => {
+    const cmd = choice === "1" ? "hybrid_mode decide choice 1" : "hybrid_mode decide choice 2";
+    try {
+      const res = await fetch("/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: cmd, agent: "ironman", engine: "mock" }),
+      });
+      const data = await res.json();
+      setDecisionLog(data.content || "");
+      if (choice === "2") {
+        setForcedMode("basic");
+        setEngine("mock");
+        setMessages(m => [...m, { role: "system", content: "You chose: Basic Offline Local even though online — private, local only, Sir. SHILATECH secure. Same circular interface." }]);
+      } else {
+        setForcedMode("full");
+        setMessages(m => [...m, { role: "system", content: "You chose: Full Stack Online — best quality, Sir. OpenAI if key set else Ollama local, search online. SHILATECH." }]);
+        // re-check engine
+        setEngine(online ? "auto" : "mock");
+      }
+      setShowDecision(false);
+    } catch (e) {
+      setDecisionLog("Decision failed, staying in " + (online ? "online" : "offline") + " mode, Sir.");
+      setShowDecision(false);
+    }
+  };
+
+  const toggleDecision = () => {
+    if (!online) {
+      setDecisionLog("Offline, Sir — already Basic Local. Nothing leaves device. SHILATECH secure.");
+      return;
+    }
+    setShowDecision(v => !v);
+  };
+
   return (
     <div className="h-screen w-screen bg-[#020208] text-cyan-100 overflow-hidden relative font-mono">
       {/* Background grid like screenshot */}
@@ -253,17 +291,56 @@ export default function IronManCircularHUD() {
             <span className="tracking-widest text-cyan-400 font-bold">J.A.R.V.I.S</span>
             <span className="border border-cyan-700 px-1.5 py-0.5 rounded text-[9px] text-cyan-600">MARK XLII</span>
           </div>
-          <span className="text-slate-500">STARK INDUSTRIES • {time.toLocaleTimeString()} • {time.toLocaleDateString()}</span>
+          <span className="text-slate-500">SHILATECH • {time.toLocaleTimeString()} • {time.toLocaleDateString()}</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`px-2 py-0.5 rounded border text-[10px] flex items-center gap-1.5 ${online ? "bg-emerald-950/50 border-emerald-700 text-emerald-400" : "bg-red-950/50 border-red-700 text-red-400"}`}>
+          <button onClick={toggleDecision} title="Click to decide Full Stack vs Basic — interactive like offline, Sir" className={`px-2 py-0.5 rounded border text-[10px] flex items-center gap-1.5 cursor-pointer hover:brightness-125 transition ${online ? "bg-emerald-950/50 border-emerald-700 text-emerald-400" : "bg-red-950/50 border-red-700 text-red-400"}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
-            {online ? `ONLINE ${engine.toUpperCase()} • FULL STACK` : "OFFLINE • BASIC"}
-          </span>
+            {forcedMode === "basic" && online ? `ONLINE • BASIC LOCAL • SHILATECH` : online ? `ONLINE ${engine.toUpperCase()} • ${forcedMode === "full" ? "FULL STACK" : "FULL STACK"} • CLICK TO DECIDE` : "OFFLINE • BASIC • SHILATECH"}
+          </button>
           <span className="text-slate-400">USER: {userName.toUpperCase()}</span>
           <span className="px-2 py-0.5 rounded bg-cyan-950/50 border border-cyan-800 text-cyan-400">ARC {arcPower.toFixed(1)}%</span>
         </div>
       </div>
+
+      {/* Interactive Decision Modal — when online, JARVIS stays interactive like offline */}
+      {showDecision && online && (
+        <div className="absolute top-[40px] left-1/2 -translate-x-1/2 z-50 w-[640px] max-w-[90vw] border border-cyan-500/50 rounded bg-black/90 backdrop-blur p-4 shadow-[0_0_40px_rgba(6,182,212,0.3)]">
+          <div className="text-[12px] tracking-widest text-cyan-400 mb-3 flex justify-between items-center">
+            <span>🌐 ONLINE — INTERACTIVE DECISION — SHILATECH</span>
+            <button onClick={() => setShowDecision(false)} className="text-slate-500 hover:text-cyan-300">✕</button>
+          </div>
+          <div className="text-[11px] text-slate-300 mb-3 leading-relaxed">
+            Network: Online via socket • Same circular interface, Sir. You decide — JARVIS stays interactive like offline mode.
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => decide("1")} className="border border-emerald-700/50 rounded p-3 bg-emerald-950/20 hover:bg-emerald-950/40 text-left transition group">
+              <div className="text-[11px] font-bold text-emerald-400 group-hover:text-emerald-300">1. FULL STACK ONLINE</div>
+              <div className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                • If OPENAI_API_KEY set → OpenAI — prompt HTTPS encrypted, best quality, no RAM for i5-6300U 8GB<br/>
+                • If Ollama running → Ollama local — LLM stays on device even online, only search online<br/>
+                • Full search + memory + best quality<br/>
+                • Badge: ONLINE FULL STACK
+              </div>
+              <div className="mt-2 text-[9px] px-2 py-1 rounded bg-emerald-900/30 text-emerald-400 inline-block">RECOMMENDED WHEN ONLINE</div>
+            </button>
+            <button onClick={() => decide("2")} className="border border-amber-700/50 rounded p-3 bg-amber-950/20 hover:bg-amber-950/40 text-left transition group">
+              <div className="text-[11px] font-bold text-amber-400 group-hover:text-amber-300">2. BASIC OFFLINE LOCAL EVEN THOUGH ONLINE</div>
+              <div className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                • Nothing leaves device, 100% private, SHILATECH secure<br/>
+                • mock always works or ollama tinyllama 1.1B / phi3:mini local<br/>
+                • Same circular interface, only badge changes<br/>
+                • Badge: ONLINE • BASIC LOCAL
+              </div>
+              <div className="mt-2 text-[9px] px-2 py-1 rounded bg-amber-900/30 text-amber-400 inline-block">PRIVATE • SECURE • LOCAL ONLY</div>
+            </button>
+          </div>
+          <div className="mt-3 text-[9px] text-slate-500">
+            For your i5-6300U 8GB: Online OpenAI best (no local RAM), Offline mock/tinyllama always works. SHILATECH • Malibu Point 10880<br/>
+            {decisionLog && <span className="text-cyan-400 block mt-1">{decisionLog.slice(0, 200)}</span>}
+          </div>
+        </div>
+      )}
 
       <div className="relative z-10 flex h-[calc(100vh-40px)]">
         {/* Left panel — like screenshot left */}
@@ -308,7 +385,7 @@ export default function IronManCircularHUD() {
             <div className="text-[9px] text-slate-600 leading-relaxed">
               JARVIS v0.1.9 • Hybrid Online/Offline<br/>
               Local-first • Auto Engine • Voice ready<br/>
-              Stark Industries • Malibu Point 10880<br/>
+              SHILATECH • Malibu Point 10880<br/>
               <span className={online ? "text-emerald-500" : "text-amber-500"}>{online ? "🌐 ONLINE FULL STACK" : "📴 OFFLINE BASIC"} • SECURE</span>
             </div>
           </div>
@@ -448,14 +525,19 @@ export default function IronManCircularHUD() {
             <div className="text-[9px] text-slate-500 tracking-widest">QUICK PROTOCOLS</div>
             <div className="grid grid-cols-2 gap-1 mt-2">
               {[
+                ["DECIDE FULL", "__DECIDE_FULL__"],
+                ["DECIDE BASIC", "__DECIDE_BASIC__"],
                 ["ONLINE CHECK", "network_status status"],
                 ["HYBRID MODE", "hybrid_mode status"],
                 ["GOOD MORNING", `Good morning ${userName}`],
-                ["BRAIN DUMP", "brain dump "],
-                ["FOCUS 25M", "focus on "],
                 ["SECURITY", "How is my data secure?"],
               ].map(([label, cmd]) => (
-                <button key={label} onClick={() => (cmd.endsWith(" ") ? setInput(cmd) : send(cmd))} className="text-[8px] px-2 py-1 rounded bg-black/60 border border-cyan-900/20 text-cyan-700 hover:bg-cyan-950/40 hover:text-cyan-300">
+                <button key={label} onClick={() => {
+                  if (cmd === "__DECIDE_FULL__") decide("1");
+                  else if (cmd === "__DECIDE_BASIC__") decide("2");
+                  else if (cmd.endsWith(" ")) setInput(cmd);
+                  else send(cmd);
+                }} className={`text-[8px] px-2 py-1 rounded bg-black/60 border text-cyan-700 hover:bg-cyan-950/40 hover:text-cyan-300 ${label.includes("FULL") ? "border-emerald-900/30 text-emerald-600" : label.includes("BASIC") ? "border-amber-900/30 text-amber-600" : "border-cyan-900/20"}`}>
                   {label}
                 </button>
               ))}
