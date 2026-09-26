@@ -6,7 +6,7 @@ param(
     [string]$Version = "0.1.9.3",
     [string]$PythonExe = "python",
     [switch]$SkipDeps,
-    [switch]$OneFile
+    [switch]$OneFile = $true
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,10 +61,26 @@ if (-not $SkipDeps) {
     Write-Host "`n[2/6] Installing build deps..." -ForegroundColor Cyan
     & $PythonExe -m pip install --upgrade pip
     & $PythonExe -m pip install pyinstaller==6.10.0
-    & $PythonExe -m pip install -e .[all] --break-system-packages 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        & $PythonExe -m pip install -e .[all]
-    }
+    & $PythonExe -m pip install -e ".[server,memory,tools-search,windows]"
+    if ($LASTEXITCODE -ne 0) { exit 1 }
+}
+
+# Build the exact React HUD that jarvis-desktop hosts. The old builder never
+# compiled or packaged this folder, so the installed app could only show the
+# unrelated Tkinter approximation.
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Write-Host "  ERROR: Node.js 20+ is required to compile the desktop HUD" -ForegroundColor Red
+    exit 1
+}
+Push-Location frontend
+npm ci
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+npm run build
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+if (-not (Test-Path "frontend/dist/index.html")) {
+    Write-Host "  ERROR: frontend/dist/index.html was not created" -ForegroundColor Red
+    exit 1
 }
 
 # 2. Clean previous builds
@@ -135,6 +151,29 @@ if ($OneFile) {
     Write-Host "  EXE built at dist/jarvis/ (onedir - need heat harvesting for MSI)" -ForegroundColor Green
 }
 
+Write-Host "  Building native desktop host with the compiled React HUD..." -ForegroundColor Cyan
+$desktopArgs = @(
+    "--onefile", "--noconfirm", "--name", "jarvis-desktop", "--windowed",
+    "--icon", "assets/icon.ico",
+    "--collect-all", "jarvis",
+    "--collect-all", "webview",
+    "--add-data", "frontend/dist;frontend/dist",
+    "--add-data", "configs;configs",
+    "--hidden-import", "jarvis.server.api",
+    "--hidden-import", "uvicorn.logging",
+    "--hidden-import", "uvicorn.loops.auto",
+    "--hidden-import", "uvicorn.protocols.http.auto",
+    "--hidden-import", "uvicorn.protocols.websockets.auto",
+    "--hidden-import", "uvicorn.lifespan.on",
+    "src/jarvis/cli/desktop_gui.py"
+)
+& $PythonExe -m PyInstaller @desktopArgs
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path "dist/jarvis-desktop.exe")) {
+    Write-Host "  Desktop HUD build failed!" -ForegroundColor Red
+    exit 1
+}
+Write-Host "  Desktop HUD built at dist/jarvis-desktop.exe" -ForegroundColor Green
+
 # 4. Build MSI with WiX if available
 if ($wixFound) {
     Write-Host "`n[5/6] Building MSI with WiX (onefile fixes disappearing)..." -ForegroundColor Cyan
@@ -161,6 +200,7 @@ if ($wixFound) {
     <MediaTemplate EmbedCab="yes" />
     <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
       <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="DesktopExecutable" />
       <ComponentRef Id="PathEnv" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
@@ -172,12 +212,16 @@ if ($wixFound) {
           <Component Id="MainExecutable" Guid="*">
             <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
           </Component>
+          <Component Id="DesktopExecutable" Guid="*">
+            <File Id="JarvisDesktopExe" Source="dist\jarvis-desktop.exe" KeyPath="yes" />
+          </Component>
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
         <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH">
           <Component Id="StartMenuShortcut" Guid="*">
-            <Shortcut Id="ApplicationStartMenuShortcut" Name="JARVIS SHILATECH" Description="Personal AI, Voice speaks online/offline, Good Morning Eugene" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER"/>
+            <Shortcut Id="ApplicationStartMenuShortcut" Name="JARVIS SHILATECH" Description="Circular Iron Man HUD with voice and local JARVIS brain" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER"/>
+            <Shortcut Id="JarvisCliShortcut" Name="JARVIS CLI" Description="JARVIS command line" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER"/>
             <Shortcut Id="UninstallProduct" Name="Uninstall JARVIS" Description="Uninstall JARVIS SHILATECH" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]"/>
             <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
             <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
@@ -223,8 +267,8 @@ if ($wixFound) {
 # 5. Create portable ZIP
 Write-Host "`n[6/6] Creating portable ZIP..." -ForegroundColor Cyan
 if ($OneFile) {
-    Compress-Archive -Path dist/jarvis.exe -DestinationPath "dist/JARVIS-$Version-onefile.zip" -Force
-    Write-Host "  ZIP onefile: dist/JARVIS-$Version-onefile.zip" -ForegroundColor Green
+    Compress-Archive -Path dist/jarvis.exe,dist/jarvis-desktop.exe -DestinationPath "dist/JARVIS-$Version-onefile.zip" -Force
+    Write-Host "  ZIP onefile: dist/JARVIS-$Version-onefile.zip (CLI + desktop HUD)" -ForegroundColor Green
 } else {
     Compress-Archive -Path dist/jarvis/* -DestinationPath "dist/JARVIS-$Version-portable.zip" -Force
     Write-Host "  ZIP: dist/JARVIS-$Version-portable.zip" -ForegroundColor Green
