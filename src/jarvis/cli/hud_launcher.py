@@ -37,7 +37,7 @@ def _run_server() -> None:
     import uvicorn
 
     try:
-        uvicorn.run(app, host=HOST, port=PORT, log_level="info")
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning", log_config=None)
     except BaseException as exc:
         _log(f"Local API failed: {type(exc).__name__}: {exc}")
         raise

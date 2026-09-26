@@ -40,7 +40,7 @@ jobs:
       - name: Package local API, HUD, and clap companion
         shell: pwsh
         run: |
-          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice src/jarvis/cli/hud_launcher.py
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice --collect-all uvicorn src/jarvis/cli/hud_launcher.py
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD.exe)) { throw "HUD EXE build failed" }
 
       - name: Install WiX v3
