@@ -1,0 +1,95 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "JARVIS — Personal AI, On Personal Devices. Local-first modular assistant stack."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "JARVIS Contributors"}]
+dependencies = [
+    "click>=8.0",
+    "rich>=13.0",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
+    "websockets>=12.0",
+    "python-multipart>=0.0.9",
+    "tomlkit>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.4",
+    "pyinstaller>=6.0",
+]
+server = [
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
+]
+memory = [
+    "numpy>=1.24",
+    "faiss-cpu>=1.7",
+    "sentence-transformers>=2.2",
+]
+memory-bm25 = [
+    "rank-bm25>=0.2.2",
+]
+inference-vllm = [
+    "vllm>=0.16.0",
+]
+inference-mlx = [
+    "mlx-lm>=0.31.1; sys_platform == 'darwin'",
+]
+inference-litellm = [
+    "litellm==1.100.1",
+]
+inference-ollama = [
+    "ollama>=0.2.0",
+]
+tools-search = [
+    "tavily-python>=0.3",
+    "ddgs>=9.11.4",
+]
+voice = [
+    "faster-whisper>=1.0",
+    "sounddevice>=0.5",
+    "soundfile>=0.12",
+]
+all = [
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
+    "numpy>=1.24",
+    "faiss-cpu>=1.7",
+    "sentence-transformers>=2.2",
+    "rank-bm25>=0.2.2",
+    "tavily-python>=0.3",
+    "ddgs>=9.11.4",
+    "litellm==1.100.1",
+]
+
+# Windows MSI extras
+windows = [
+    "pyinstaller>=6.0",
+]
+
+[project.scripts]
+jarvis = "jarvis.cli.main:cli"
+jarvis-desktop = "app:main"
+jarvis-server = "jarvis.server.api:serve_cli"
+
+[project.urls]
+Homepage = "https://github.com/open-jarvis/OpenJarvis"
+Repository = "https://github.com/eugenshila/JARVIS"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jarvis"]
+
+[tool.ruff]
+line-length = 100
