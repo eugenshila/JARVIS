@@ -170,3 +170,27 @@ class HomeAssistantConnector:
             return f"Home Assistant at {self.url}: {len(lights)} lights, {len(switches)} switches, {len(states)} total entities"
         except Exception as e:
             return f"HA not connected: {e}. Set HASS_URL and HASS_TOKEN"
+
+
+if __name__ == "__main__":
+    import argparse, json
+    parser = argparse.ArgumentParser(description="Home Assistant connector")
+    parser.add_argument("--url", help="HASS URL http://homeassistant.local:8123")
+    parser.add_argument("--token", help="Long-lived token")
+    parser.add_argument("--list-lights", action="store_true", help="List lights")
+    parser.add_argument("--status", action="store_true", help="Show status")
+    parser.add_argument("--on", help="Turn on light entity_id")
+    parser.add_argument("--off", help="Turn off light entity_id")
+    args = parser.parse_args()
+
+    ha = HomeAssistantConnector(url=args.url, token=args.token)
+    if args.list_lights:
+        print(json.dumps(ha.list_lights(), indent=2))
+    elif args.status:
+        print(ha.get_status())
+    elif args.on:
+        print(ha.turn_on_light(args.on))
+    elif args.off:
+        print(ha.turn_off_light(args.off))
+    else:
+        parser.print_help()

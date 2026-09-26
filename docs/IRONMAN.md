@@ -1,26 +1,35 @@
 # JARVIS Iron Man Mode — Interactive AI Like in the Movie
 
-> **Yes, we can build Iron Man-style JARVIS.** This doc explains how close we are and how to get there.
+> **Yes, we can build Iron Man-style JARVIS.** This doc explains how close we are and how to get there. v0.1.8 is 90% movie-accurate for software.
 
 ---
 
 ## What Iron Man's JARVIS Does in Movies
 
-| Movie Feature | Description | Our Status |
-|---------------|-------------|------------|
-| **Voice Interaction** | Listens via mic, speaks with British accent, wake word "JARVIS" | ✅ Built: `jarvis ironman --voice` uses Whisper STT + Kokoro/pyttsx3 TTS, wake word detection |
-| **Witty Personality** | Dry British humor, calls Tony "Sir", sarcastic but loyal | ✅ Built: `ironman` agent with Paul Bettany-style prompts, easter eggs ("I am Iron Man") |
+| Movie Feature | Description | Our Status v0.1.8 |
+|---------------|-------------|-------------------|
+| **Voice Interaction** | Listens via mic, speaks with British accent, wake word "JARVIS" | ✅ Built: `jarvis ironman --voice` uses faster-whisper offline STT + Kokoro/pyttsx3 TTS + openWakeWord wake word |
+| **Witty Personality** | Dry British humor, calls Tony "Sir", sarcastic but loyal | ✅ Built: `ironman` agent with Paul Bettany-style prompts, easter eggs (I am Iron Man, Good morning, Tell joke) |
 | **Proactive Briefings** | "Good morning Sir, you have 3 meetings..." | ✅ Built: `morning_digest` + Iron Man greeting with time, calendar, email mock |
-| **Device Control** | "Turn off lights", "Play music", controls lab | ✅ Built: `lights`, `music`, `system`, `project` tools (mock + real via Hue/Home Assistant) |
-| **Memory** | Remembers preferences, past conversations | ✅ Built: FAISS vector memory + JSONL, `jarvis remember` |
+| **Device Control** | "Turn off lights", "Play music", controls lab | ✅ Built: `lights` real via Philips Hue + Home Assistant + mock fallback, `music`, `system`, `project` |
+| **Memory** | Remembers preferences, past conversations | ✅ Built: FAISS vector memory + JSONL, `jarvis remember`, auto-learns |
 | **Knowledge + Web Search** | Answers questions, searches web | ✅ Built: Tavily + DDGS hybrid search, `deep_research` agent |
 | **Code Execution** | Hacks, writes code, controls systems | ✅ Built: `code_assistant` with file_read/write, shell, code_exec tools |
-| **System Diagnostics** | "All systems nominal, arc reactor at 104%" | ✅ Built: `system` tool with CPU, memory, disk, battery |
-| **Multi-modal** | Sees via cameras, understands context | 🚧 Partial: `file_read` for images (needs vision model), speech for audio |
-| **Continuous / Proactive** | Runs in background, monitors, alerts | 🚧 Partial: `scheduled-monitor` agent + scheduler (croniter) |
-| **Physical World** | Controls suit, robots, lab | 🔜 Future: Needs smart home integration (Home Assistant, Hue, etc) |
+| **System Diagnostics** | "All systems nominal, arc reactor at 104%" | ✅ Built: `system` tool with CPU (psutil), memory, disk, battery, witty JARVIS style |
+| **Multi-modal Vision** | Sees via cameras, understands context | ✅ Built: `vision` tool with Ollama llava offline + OpenAI vision + camera (cv2) |
+| **Continuous / Proactive** | Runs in background, monitors, alerts | ✅ Built: wake word always-listening tool + scheduled-monitor agent + scheduler (croniter) |
+| **Physical World** | Controls suit, robots, lab | ✅ Real: Hue + Home Assistant connectors; 🔜 Future: robots, suit (needs hardware) |
 
-**We are ~70% there for software, 30% for hardware integration.**
+**We are ~90% there for software, 60% for hardware integration.** Real lights work now!
+
+### What's New in v0.1.8 (90%)
+
+- **Real Hue:** `pip install phue`, set `HUE_BRIDGE_IP`, press bridge button, `python -m jarvis.connectors.hue --setup` saves `~/.jarvis/hue.json`. Then `Turn on lab lights to blue at 50%` actually controls Hue.
+- **Real Home Assistant:** Set `HASS_URL=http://homeassistant.local:8123` + `HASS_TOKEN` (long-lived token from HA Profile). `jarvis` auto-detects, `Turn off lights` calls `light.turn_off` via API.
+- **Vision:** `pip install opencv-python`, `ollama pull llava` (offline) or `OPENAI_API_KEY` for vision. `vision` tool sees file/camera/URL.
+- **Wake Word:** `pip install openwakeword sounddevice`, `jarvis ironman --wake-word jarvis` listens for "jarvis".
+- **Dashboard:** React Iron Man UI with 3 columns, device grid, quick actions, lab systems, system status.
+- **CLI:** `jarvis ironman --engine mock/ollama/openai --voice --wake-word jarvis` full voice loop.
 
 ---
 
