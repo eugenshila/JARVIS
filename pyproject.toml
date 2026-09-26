@@ -77,6 +77,7 @@ all = [
 # Windows MSI extras
 windows = [
     "pyinstaller>=6.0",
+    "pywebview>=5.0,<6",
 ]
 
 [project.scripts]

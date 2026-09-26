@@ -2,3 +2,15 @@ __pycache__/
 *.py[cod]
 .env
 .venv/
+
+# Generated frontend and Python build output
+node_modules/
+frontend/dist/
+build/
+dist/
+*.spec
+
+# Test and tool caches
+.pytest_cache/
+.ruff_cache/
+coverage/
