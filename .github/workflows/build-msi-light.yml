@@ -35,24 +35,28 @@ jobs:
           python -m pip install pyinstaller==6.10.0
           python -m pip install -e .[server]
 
-      - name: Build EXE (onefile - fixes disappearing, single exe contains all deps)
+      - name: Build EXE (onefile - modern circular HUD + voice auto-init)
         run: |
           python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.tools.network_tools --hidden-import jarvis.core.network --hidden-import jarvis.engine.auto_engine --hidden-import jarvis.agents.ironman --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico
           python -m PyInstaller --onefile --name jarvis-desktop --windowed src/jarvis/cli/desktop_gui.py --collect-all jarvis --add-data "configs;configs" --add-data "app.py;." --add-data "prompts.py;." --add-data "client.py;." --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico --noconfirm
           dir dist
+          Write-Host "=== Verify app.py bundled ==="
+          python -c "import pathlib; print(list(pathlib.Path('dist').glob('*')))"
+          # Check that jarvis-desktop.exe exists and size > 10MB
+          if (Test-Path dist/jarvis-desktop.exe) { Write-Host "jarvis-desktop.exe OK $((Get-Item dist/jarvis-desktop.exe).Length / 1MB) MB" } else { Write-Error "jarvis-desktop.exe missing!" }
 
-      - name: Build MSI (onefile - fixes disappearing, SHILATECH)
+      - name: Build MSI (onefile - modern circular HUD SHILATECH v0.1.9.8)
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.9.3" }
-          Write-Host "Building MSI v$version SHILATECH - onefile fixes disappearing"
+          if (-not $version) { $version = "0.1.9.8" }
+          Write-Host "Building MSI v$version SHILATECH - modern circular HUD 13 72 ticks 60 segments voice auto-init"
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
             <Product Id="*" Name="JARVIS - SHILATECH - Personal AI" Language="1033" Version="$version" Manufacturer="SHILATECH" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH - Desktop GUI stays open, voice speaks online/offline" />
-              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH Modern Circular HUD 13 72 ticks 60 segments voice auto-init" />
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." AllowSameVersionUpgrades="yes" />
               <MediaTemplate EmbedCab="yes" />
               <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
                 <ComponentRef Id="MainExecutable" />
