@@ -9,7 +9,7 @@ on:
       version:
         description: "Version"
         required: false
-        default: "0.1.9.3"
+        default: "0.1.10.0"
 
 jobs:
   build-light:
@@ -48,8 +48,9 @@ jobs:
       - name: Build MSI (onefile - modern circular HUD SHILATECH v0.1.9.8)
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.9.8" }
+          $version = "${{ github.event.inputs.version }}"
+          if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.0" }
           Write-Host "Building MSI v$version SHILATECH - modern circular HUD 13 72 ticks 60 segments voice auto-init"
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
@@ -107,8 +108,9 @@ jobs:
       - name: Create Python portable ZIP (guaranteed no disappearing)
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.9.3" }
+          $version = "${{ github.event.inputs.version }}"
+          if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.0" }
           New-Item -ItemType Directory -Force -Path "python-portable/JARVIS"
           Copy-Item -Recurse -Force src python-portable/JARVIS/
           Copy-Item -Force app.py,client.py,prompts.py,pyproject.toml,README.md,INSTALL.md python-portable/JARVIS/

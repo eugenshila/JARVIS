@@ -9,7 +9,7 @@ on:
       version:
         description: "Version (e.g., 0.1.0)"
         required: false
-        default: "0.1.9.3"
+        default: "0.1.10.0"
 
 jobs:
   build-windows:
@@ -54,7 +54,7 @@ jobs:
         run: |
           $version = "${{ github.event.inputs.version }}"
           if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
-          if (-not $version) { $version = "0.1.9.8" }
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.0" }
           Write-Host "Building MSI version $version - ONEFILE modern circular HUD + voice auto-init"
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
@@ -114,8 +114,9 @@ jobs:
 
       - name: Create portable ZIPs
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          if (-not $version) { $version = "0.1.9.3" }
+          $version = "${{ github.event.inputs.version }}"
+          if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.0" }
           Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-$version-portable.zip" -Force
           Compress-Archive -Path dist/jarvis.exe -DestinationPath "dist/JARVIS-$version-onefile.zip" -Force
           Compress-Archive -Path dist/jarvis-portable/* -DestinationPath "dist/JARVIS-portable.zip" -Force
