@@ -60,7 +60,24 @@ jobs:
       - name: Build EXE + MSI (complete payload, gated by selftest)
         shell: pwsh
         run: |
-          .\deploy\windows\build_msi.ps1 -Version ${{ steps.version.outputs.version }} -Light
+          $ErrorActionPreference = 'Continue'
+          .\deploy\windows\build_msi.ps1 -Version ${{ steps.version.outputs.version }} -Light *>&1 |
+            Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # The raw log is not always reachable from every network; annotations
+            # are served by the API, so replay the tail as annotations too.
+            Get-Content build.log -Tail 40 | ForEach-Object { Write-Host "::error::$_" }
+            exit $code
+          }
+
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ steps.version.outputs.version }}
+          path: build.log
+          if-no-files-found: ignore
 
       - name: Prove the installed payload is complete
         shell: pwsh

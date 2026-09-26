@@ -31,7 +31,13 @@ Set-Location $repo
 function Step($n, $text) { Write-Host "`n[$n] $text" -ForegroundColor Cyan }
 function Ok($text) { Write-Host "  $text" -ForegroundColor Green }
 function Warn($text) { Write-Host "  $text" -ForegroundColor Yellow }
-function Die($text) { Write-Host "  $text" -ForegroundColor Red; exit 1 }
+function Die($text) {
+    Write-Host "  $text" -ForegroundColor Red
+    # On a runner this becomes an annotation, which survives where the raw log
+    # may not be reachable.
+    if ($env:GITHUB_ACTIONS) { Write-Host "::error::$text" }
+    exit 1
+}
 
 # ---------------------------------------------------------------- 1. manifest
 Step 1 "Refreshing the build manifest"
