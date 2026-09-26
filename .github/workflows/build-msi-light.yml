@@ -8,6 +8,12 @@ on:
   push:
     tags:
       - "v*"
+    # Test installers for work-in-progress branches. No release is published —
+    # the release step below only runs for tags — so this just leaves a
+    # downloadable MSI on the run, which is what "can we build one to test?"
+    # actually needs.
+    branches:
+      - "arena/**"
   workflow_dispatch:
     inputs:
       version:
