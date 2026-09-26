@@ -150,6 +150,7 @@ PAYLOAD_FILES = [
     "docs/FULL_CAPABILITIES.md",
     "docs/IRONMAN.md",
     "docs/MSI_BUILD_v0.1.9.2.md",
+    "docs/MSI_TESTING.md",
     "docs/ONLINE_VS_OFFLINE_COMPARISON.md",
     "docs/PRE_MSI_CHECKLIST.md",
     "docs/SECURITY_HYBRID.md",
