@@ -85,11 +85,32 @@ jobs:
         shell: pwsh
         run: |
           # The exe passed its own gate during the build; this is the payload the
-          # MSI carries — the part that used to be missing entirely.
+          # MSI carries — the part that used to be missing entirely. Everything
+          # is echoed as an annotation as well, so the result is readable from
+          # the API without downloading the log.
           $files = (Get-ChildItem -Recurse -File dist/payload).Count
-          Write-Host "payload files in the installer: $files"
+          Write-Host "::notice::payload files inside the installer: $files"
           if ($files -lt 100) { throw "payload looks truncated ($files files)" }
-          Get-ChildItem dist -File | Format-Table Name, Length
+
+          $report = (dist\jarvis.exe selftest --json | Out-String)
+          $p = $report.Substring($report.IndexOf('{'), $report.LastIndexOf('}') - $report.IndexOf('{') + 1) | ConvertFrom-Json
+          Write-Host "::notice::selftest: $($p.modules_ok)/$($p.modules_expected) modules importable inside jarvis.exe, complete=$($p.complete)"
+
+          foreach ($f in Get-ChildItem dist -File) {
+            Write-Host "::notice::$($f.Name) — $([math]::Round($f.Length/1MB,1)) MB"
+          }
+
+          # A last look inside the MSI itself: the file table is the only proof
+          # that the payload actually made it into the package rather than just
+          # onto the build agent's disk.
+          $msi = (Get-ChildItem dist/*.msi | Select-Object -First 1).FullName
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $db = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($msi, 0))
+          $view = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @("SELECT COUNT(*) FROM File"))
+          $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null)
+          $rec = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
+          $count = $rec.GetType().InvokeMember('StringData', 'GetProperty', $null, $rec, 1)
+          Write-Host "::notice::files packaged inside the MSI: $count"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
