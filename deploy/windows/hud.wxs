@@ -18,7 +18,10 @@
 
     <DirectoryRef Id="INSTALLFOLDER">
       <Component Id="HudExecutable" Guid="*">
-        <File Id="HudExe" Source="dist\JARVIS-HUD.exe" KeyPath="yes" />
+        <File Id="HudExe" Source="dist\JARVIS-HUD.exe" />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Shilatech\JARVIS HUD" Name="Executable"
+                       Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="APPLICATIONFOLDER">
