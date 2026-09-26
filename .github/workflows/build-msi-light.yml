@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "v*"
+    # Build a downloadable test installer for Arena work branches. The Release
+    # step below remains tag-only, so branch builds cannot overwrite a release.
+    branches:
+      - "arena/**"
   workflow_dispatch:
     inputs:
       version:
