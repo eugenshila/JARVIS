@@ -148,9 +148,16 @@ if (-not $SkipSelftest) {
         if (-not $why) { $why = "jarvis.exe produced no output — the bootloader itself failed" }
         Die "INCOMPLETE BUILD (selftest exit $gate): $why"
     }
+    # The exe may print more than the report (a bootloader notice, a warning
+    # from a hook), so take the JSON object out of whatever came back.
+    $start = $flat.IndexOf('{')
+    $end = $flat.LastIndexOf('}')
     try {
-        $parsed = $flat | ConvertFrom-Json
+        $parsed = $flat.Substring($start, $end - $start + 1) | ConvertFrom-Json
         Ok "$($parsed.modules_ok)/$($parsed.modules_expected) modules importable inside the exe"
+        if ($parsed.modules_needing_deps.Count) {
+            Warn "$($parsed.modules_needing_deps.Count) modules await optional extras: $(($parsed.modules_needing_deps | ForEach-Object { $_.module }) -join ', ')"
+        }
     } catch {
         Warn "selftest passed but its report could not be parsed"
     }
@@ -178,21 +185,44 @@ if ($wixBin -or (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
     # heat turns the staged tree into components. -gg/-g1 give stable, brace-free
     # GUIDs; -srd keeps the payload rooted at INSTALLFOLDER rather than adding a
     # directory level; -sreg because there is nothing to harvest from a source tree.
-    & heat.exe dir dist\payload -cg PayloadComponents -dr INSTALLFOLDER `
-        -gg -g1 -sfrag -srd -sreg -var var.PayloadDir `
-        -out obj\payload.wxs
+    $heatArgs = @(
+        'dir', 'dist\payload',
+        '-cg', 'PayloadComponents',
+        '-dr', 'INSTALLFOLDER',
+        '-gg', '-g1', '-sfrag', '-srd', '-sreg',
+        '-var', 'var.PayloadDir',
+        '-out', 'obj\payload.wxs'
+    )
+    & heat.exe @heatArgs
     if ($LASTEXITCODE -ne 0) { Die "heat.exe failed" }
     Ok "payload harvested"
 
-    & candle.exe -arch x64 -dVersion=$Version -dPayloadDir=dist\payload `
-        deploy\windows\jarvis.wxs obj\payload.wxs -out obj\
+    # Built as an array of double-quoted strings on purpose. Written inline as
+    # `-dVersion=$Version`, PowerShell hands candle the literal text and WiX
+    # reports `'$Version' is not a valid version` — a confusing way to discover
+    # an argument-parsing quirk.
+    $candleArgs = @(
+        '-arch', 'x64',
+        "-dVersion=$Version",
+        "-dPayloadDir=dist\payload",
+        'deploy\windows\jarvis.wxs',
+        'obj\payload.wxs',
+        '-out', 'obj\'
+    )
+    & candle.exe @candleArgs
     if ($LASTEXITCODE -ne 0) { Die "candle.exe failed" }
 
     $msi = "dist\JARVIS-$Version-x64.msi"
-    & light.exe obj\jarvis.wixobj obj\payload.wixobj -ext WixUIExtension -cultures:en-us -out $msi
+    $lightArgs = @(
+        'obj\jarvis.wixobj', 'obj\payload.wixobj',
+        '-ext', 'WixUIExtension',
+        '-cultures:en-us',
+        '-out', $msi
+    )
+    & light.exe @lightArgs
     if ($LASTEXITCODE -ne 0) {
-        Warn "light failed with validation — retrying with ICE validation off"
-        & light.exe obj\jarvis.wixobj obj\payload.wixobj -ext WixUIExtension -cultures:en-us -sval -out $msi
+        Warn "light failed — retrying with ICE validation off"
+        & light.exe @lightArgs -sval
     }
     if ($LASTEXITCODE -ne 0) { Die "light.exe failed" }
 
