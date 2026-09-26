@@ -85,7 +85,13 @@ jobs:
                 if ($response.StatusCode -eq 200 -and $response.Content -match 'JARVIS') { $healthy = $true; break }
               } catch { }
             }
-            if (-not $healthy) { throw "Installed HUD did not serve its interface" }
+            if (-not $healthy) {
+              $log = Join-Path $env:LOCALAPPDATA 'JARVIS\hud.log'
+              if (Test-Path $log) { Get-Content $log | Write-Host }
+              Write-Host "Process exited: $($process.HasExited)"
+              try { Write-Host "API response: $((Invoke-WebRequest -Uri http://127.0.0.1:8765/hud/status -UseBasicParsing -TimeoutSec 2).Content)" } catch { Write-Host "API not reachable: $_" }
+              throw "Installed HUD did not serve its interface"
+            }
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           }
