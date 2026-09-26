@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import urllib.error
+import urllib.request
 import time
 import uuid
 from typing import Any, AsyncIterator
@@ -52,6 +55,63 @@ class AgentRunRequest(BaseModel):
 class MemoryAddRequest(BaseModel):
     content: str
     metadata: dict[str, Any] | None = None
+
+
+HUD_MODEL = "qwen2.5:3b"
+
+
+class HudMessage(BaseModel):
+    role: str
+    content: str
+
+
+class HudChatRequest(BaseModel):
+    messages: list[HudMessage]
+
+
+def _ollama_request(path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+    request = urllib.request.Request(
+        f"{host}{path}",
+        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=120 if payload is not None else 3) as response:
+        return json.load(response)
+
+
+@app.get("/hud/status")
+async def hud_status():
+    try:
+        result = await asyncio.to_thread(_ollama_request, "/api/tags")
+        installed = any(model.get("name") == HUD_MODEL or model.get("model") == HUD_MODEL
+                        for model in result.get("models", []))
+        return {"ollama": "ready" if installed else "model_missing", "model": HUD_MODEL}
+    except (OSError, ValueError) as exc:
+        return {"ollama": "unavailable", "model": HUD_MODEL, "detail": str(exc)}
+
+
+@app.post("/hud/chat")
+async def hud_chat(req: HudChatRequest):
+    history = [m for m in req.messages if m.role in ("user", "assistant") and m.content.strip()][-20:]
+    if not history or history[-1].role != "user":
+        raise HTTPException(status_code=400, detail="A user message is required.")
+    system = ("You are JARVIS, Eugene's concise, capable personal assistant. Speak naturally "
+              "with a little dry wit. You run locally through Ollama. Do not claim to have "
+              "read email, calendar, files, weather, devices, or live system data unless "
+              "that data was supplied in this conversation. You cannot perform actions "
+              "from this chat yet. Say what needs a connected tool when asked to act.")
+    payload = {"model": HUD_MODEL, "stream": False,
+               "messages": [{"role": "system", "content": system}] +
+                           [{"role": m.role, "content": m.content[:8000]} for m in history]}
+    try:
+        result = await asyncio.to_thread(_ollama_request, "/api/chat", payload)
+    except urllib.error.HTTPError as exc:
+        detail = "Install the model with: ollama pull qwen2.5:3b" if exc.code == 404 else f"Ollama returned HTTP {exc.code}."
+        raise HTTPException(status_code=503, detail=detail) from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=f"Ollama is unavailable: {exc}") from exc
+    return {"content": result.get("message", {}).get("content", ""), "model": HUD_MODEL}
 
 
 @app.get("/health")

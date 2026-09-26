@@ -1,81 +1,47 @@
 import { useEffect, useRef, useState } from "react";
 
-// Iron Man Circular HUD — matches Bing wallpaper screenshot
-// Central large circular HUD with blue glow, outer rings, segments, left/right panels
-// For both local and online starts — same UI, only ONLINE/OFFLINE badge changes
+type ChatMessage = { role: "user" | "assistant"; content: string };
+type Status = "checking" | "ready" | "model_missing" | "unavailable";
 
 export default function IronManCircularHUD() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const chatEnd = useRef<HTMLDivElement>(null);
+  const busyRef = useRef(false);
   const [time, setTime] = useState(new Date());
-  const [arcPower, setArcPower] = useState(97.3);
-  const [online, setOnline] = useState(navigator.onLine);
-  const [engine, setEngine] = useState("auto");
-  const [userName] = useState(localStorage.getItem("jarvis_user_name") || "Eugene");
-  const [weather] = useState({ temp: "56°F", condition: "Partly Cloudy", high: "74°", low: "60°" });
-  const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
+  const [status, setStatus] = useState<Status>("checking");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [showDecision, setShowDecision] = useState(false);
-  const [forcedMode, setForcedMode] = useState<"auto" | "full" | "basic">("auto");
-  const [decisionLog, setDecisionLog] = useState<string>("");
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [focusItems, setFocusItems] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("jarvis_focus") || "[]"); } catch { return []; }
+  });
+  const [newFocus, setNewFocus] = useState("");
+  const userName = localStorage.getItem("jarvis_user_name") || "Eugene";
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setTime(new Date());
-      setArcPower(p => 94 + Math.random() * 6);
-    }, 1000);
-    // Voice auto-init - speak Good morning on load like desktop
-    setTimeout(() => {
-      if (voiceEnabled && 'speechSynthesis' in window) {
-        const now = new Date();
-        const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
-        const msg = `${greeting}, ${userName}. It's ${now.toLocaleTimeString()} on ${now.toLocaleDateString()}. Arc reactor at ${arcPower.toFixed(1)} percent. Circular HUD online, SHILATECH secure. I speak both online and offline, Sir.`;
-        try {
-          window.speechSynthesis.cancel();
-          const utter = new SpeechSynthesisUtterance(msg);
-          const voices = window.speechSynthesis.getVoices();
-          const british = voices.find(v => v.name.toLowerCase().includes('british') || v.name.toLowerCase().includes('uk'));
-          if (british) utter.voice = british;
-          utter.onstart = () => setIsSpeaking(true);
-          utter.onend = () => setIsSpeaking(false);
-          window.speechSynthesis.speak(utter);
-        } catch {}
-      }
-    }, 1500);
-    return () => clearInterval(id);
+    const timer = window.setInterval(() => setTime(new Date()), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
+  const checkStatus = async () => {
+    try {
+      const res = await fetch("/hud/status");
+      if (!res.ok) throw new Error("JARVIS server is not running");
+      const data = await res.json();
+      setStatus(data.ollama);
+    } catch { setStatus("unavailable"); }
+  };
   useEffect(() => {
-    const checkOnline = async () => {
-      setOnline(navigator.onLine);
-      try {
-        const res = await fetch("/run", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: "network_status check", agent: "ironman", engine: "mock" }),
-        });
-        const data = await res.json();
-        if (data.content) {
-          if (data.content.includes("openai")) setEngine("openai");
-          else if (data.content.includes("ollama")) setEngine("ollama");
-          else setEngine("mock");
-        }
-      } catch {
-        setEngine("mock");
-      }
-    };
-    checkOnline();
-    window.addEventListener("online", checkOnline);
-    window.addEventListener("offline", checkOnline);
-    const iid = setInterval(checkOnline, 30000);
-    return () => {
-      window.removeEventListener("online", checkOnline);
-      window.removeEventListener("offline", checkOnline);
-      clearInterval(iid);
-    };
+    checkStatus();
+    const timer = window.setInterval(checkStatus, 15000);
+    return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
+  useEffect(() => { localStorage.setItem("jarvis_focus", JSON.stringify(focusItems)); }, [focusItems]);
 
   // Circular HUD canvas — matches screenshot
   useEffect(() => {
@@ -279,389 +245,86 @@ export default function IronManCircularHUD() {
     return () => cancelAnimationFrame(animId);
   }, []);
 
+
   const speak = (text: string) => {
-    if (!voiceEnabled) return;
-    if (!('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text.slice(0, 400).replace(/```.*?```/gs, " ").replace(/[*#`]/g, ""));
-      utter.rate = 1.0;
-      utter.pitch = 1.0;
-      const voices = window.speechSynthesis.getVoices();
-      const british = voices.find(v => v.name.toLowerCase().includes('british') || v.name.toLowerCase().includes('uk') || v.name.toLowerCase().includes('google uk'));
-      if (british) utter.voice = british;
-      utter.onstart = () => setIsSpeaking(true);
-      utter.onend = () => setIsSpeaking(false);
-      utter.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utter);
-    } catch {}
+    if (!voiceEnabled || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.slice(0, 650).replace(/```[\s\S]*?```/g, " ").replace(/[*#`]/g, ""));
+    utterance.rate = 1;
+    const voice = window.speechSynthesis.getVoices().find(v => /British|English UK|en-GB/i.test(v.name + " " + v.lang));
+    if (voice) utterance.voice = voice;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
   };
 
-  const toggleListen = () => {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      setDecisionLog("Speech recognition not available in this browser, Sir. Type instead. SHILATECH voice uses browser offline API.");
-      return;
-    }
-    const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const rec = new SR();
-    rec.lang = 'en-US';
-    rec.continuous = false;
-    rec.interimResults = false;
-    rec.onstart = () => setIsListening(true);
-    rec.onend = () => setIsListening(false);
-    rec.onresult = (e: any) => {
-      const t = e.results[0][0].transcript;
-      setInput(t);
-      send(t);
-    };
-    rec.onerror = () => setIsListening(false);
-    rec.start();
-  };
-
-  const send = async (text?: string) => {
-    const prompt = text || input;
-    if (!prompt.trim()) return;
-    setMessages(m => [...m, { role: "user", content: prompt }]);
+  const send = async (spoken?: string) => {
+    const prompt = (spoken ?? input).trim();
+    if (!prompt || busyRef.current) return;
+    busyRef.current = true;
+    const history: ChatMessage[] = [...messages, { role: "user", content: prompt }];
+    setMessages(history);
     setInput("");
+    setError("");
+    setBusy(true);
     try {
-      const res = await fetch("/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, agent: "ironman", engine: "auto" }),
+      const res = await fetch("/hud/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
       });
       const data = await res.json();
-      const reply = data.content || "Error, Sir.";
-      setMessages(m => [...m, { role: "assistant", content: reply }]);
-      speak(reply);
-    } catch {
-      const fallback = "Comms down, Sir. Running offline mock — always works. SHILATECH secure.";
-      setMessages(m => [...m, { role: "assistant", content: fallback }]);
-      speak(fallback);
-    }
-  };
-
-  const decide = async (choice: "1" | "2") => {
-    const cmd = choice === "1" ? "hybrid_mode decide choice 1" : "hybrid_mode decide choice 2";
-    try {
-      const res = await fetch("/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: cmd, agent: "ironman", engine: "mock" }),
-      });
-      const data = await res.json();
-      setDecisionLog(data.content || "");
-      if (choice === "2") {
-        setForcedMode("basic");
-        setEngine("mock");
-        setMessages(m => [...m, { role: "system", content: "You chose: Basic Offline Local even though online — private, local only, Sir. SHILATECH secure. Same circular interface." }]);
-      } else {
-        setForcedMode("full");
-        setMessages(m => [...m, { role: "system", content: "You chose: Full Stack Online — best quality, Sir. OpenAI if key set else Ollama local, search online. SHILATECH." }]);
-        // re-check engine
-        setEngine(online ? "auto" : "mock");
-      }
-      setShowDecision(false);
+      if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+      if (!data.content) throw new Error("Ollama returned an empty response.");
+      setMessages(previous => [...previous, { role: "assistant", content: data.content }]);
+      setStatus("ready");
+      speak(data.content);
     } catch (e) {
-      setDecisionLog("Decision failed, staying in " + (online ? "online" : "offline") + " mode, Sir.");
-      setShowDecision(false);
-    }
+      setError(e instanceof Error ? e.message : "Could not reach Ollama.");
+      checkStatus();
+    } finally { busyRef.current = false; setBusy(false); }
   };
 
-  const toggleDecision = () => {
-    if (!online) {
-      setDecisionLog("Offline, Sir — already Basic Local. Nothing leaves device. SHILATECH secure.");
-      return;
-    }
-    setShowDecision(v => !v);
+  const listen = () => {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) { setError("Speech recognition is unavailable in this browser. You can type instead."); return; }
+    const recognition = new Recognition();
+    recognition.lang = "en-GB";
+    recognition.continuous = false;
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => { setIsListening(false); setError("Microphone recognition failed. Check browser microphone access."); };
+    recognition.onresult = (event: any) => send(event.results[0][0].transcript);
+    recognition.start();
   };
+
+  const addFocus = () => {
+    if (newFocus.trim()) setFocusItems(items => [...items, newFocus.trim()].slice(0, 3));
+    setNewFocus("");
+  };
+  const statusLabel = status === "ready" ? "OLLAMA READY" : status === "model_missing" ? "MODEL MISSING" : status === "checking" ? "CHECKING" : "OLLAMA OFFLINE";
 
   return (
-    <div className="h-screen w-screen bg-[#020208] text-cyan-100 overflow-hidden relative font-mono">
-      {/* Background grid like screenshot */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: `linear-gradient(rgba(6,182,212,1) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,1) 1px, transparent 1px)`,
-        backgroundSize: "40px 40px"
-      }} />
-
-      {/* Top bar — Chrome-like from screenshot */}
-      <div className="relative z-10 flex items-center justify-between px-4 py-2 border-b border-cyan-900/30 bg-black/80 text-[11px]">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_#22c55e]" />
-            <span className="tracking-widest text-cyan-400 font-bold">J.A.R.V.I.S</span>
-            <span className="border border-cyan-700 px-1.5 py-0.5 rounded text-[9px] text-cyan-600">MARK XLII</span>
-          </div>
-          <span className="text-slate-500">SHILATECH • {time.toLocaleTimeString()} • {time.toLocaleDateString()}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={toggleDecision} title="Click to decide Full Stack vs Basic — interactive like offline, Sir" className={`px-2 py-0.5 rounded border text-[10px] flex items-center gap-1.5 cursor-pointer hover:brightness-125 transition ${online ? "bg-emerald-950/50 border-emerald-700 text-emerald-400" : "bg-red-950/50 border-red-700 text-red-400"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
-            {forcedMode === "basic" && online ? `ONLINE • BASIC LOCAL • SHILATECH` : online ? `ONLINE ${engine.toUpperCase()} • ${forcedMode === "full" ? "FULL STACK" : "FULL STACK"} • CLICK TO DECIDE` : "OFFLINE • BASIC • SHILATECH"}
-          </button>
-          <span className="text-slate-400">USER: {userName.toUpperCase()}</span>
-          <span className="px-2 py-0.5 rounded bg-cyan-950/50 border border-cyan-800 text-cyan-400">ARC {arcPower.toFixed(1)}%</span>
-        </div>
-      </div>
-
-      {/* Interactive Decision Modal — when online, JARVIS stays interactive like offline */}
-      {showDecision && online && (
-        <div className="absolute top-[40px] left-1/2 -translate-x-1/2 z-50 w-[640px] max-w-[90vw] border border-cyan-500/50 rounded bg-black/90 backdrop-blur p-4 shadow-[0_0_40px_rgba(6,182,212,0.3)]">
-          <div className="text-[12px] tracking-widest text-cyan-400 mb-3 flex justify-between items-center">
-            <span>🌐 ONLINE — INTERACTIVE DECISION — SHILATECH</span>
-            <button onClick={() => setShowDecision(false)} className="text-slate-500 hover:text-cyan-300">✕</button>
-          </div>
-          <div className="text-[11px] text-slate-300 mb-3 leading-relaxed">
-            Network: Online via socket • Same circular interface, Sir. You decide — JARVIS stays interactive like offline mode.
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => decide("1")} className="border border-emerald-700/50 rounded p-3 bg-emerald-950/20 hover:bg-emerald-950/40 text-left transition group">
-              <div className="text-[11px] font-bold text-emerald-400 group-hover:text-emerald-300">1. FULL STACK ONLINE</div>
-              <div className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                • If OPENAI_API_KEY set → OpenAI — prompt HTTPS encrypted, best quality, no RAM for i5-6300U 8GB<br/>
-                • If Ollama running → Ollama local — LLM stays on device even online, only search online<br/>
-                • Full search + memory + best quality<br/>
-                • Badge: ONLINE FULL STACK
-              </div>
-              <div className="mt-2 text-[9px] px-2 py-1 rounded bg-emerald-900/30 text-emerald-400 inline-block">RECOMMENDED WHEN ONLINE</div>
-            </button>
-            <button onClick={() => decide("2")} className="border border-amber-700/50 rounded p-3 bg-amber-950/20 hover:bg-amber-950/40 text-left transition group">
-              <div className="text-[11px] font-bold text-amber-400 group-hover:text-amber-300">2. BASIC OFFLINE LOCAL EVEN THOUGH ONLINE</div>
-              <div className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                • Nothing leaves device, 100% private, SHILATECH secure<br/>
-                • mock always works or ollama tinyllama 1.1B / phi3:mini local<br/>
-                • Same circular interface, only badge changes<br/>
-                • Badge: ONLINE • BASIC LOCAL
-              </div>
-              <div className="mt-2 text-[9px] px-2 py-1 rounded bg-amber-900/30 text-amber-400 inline-block">PRIVATE • SECURE • LOCAL ONLY</div>
-            </button>
-          </div>
-          <div className="mt-3 text-[9px] text-slate-500">
-            For your i5-6300U 8GB: Online OpenAI best (no local RAM), Offline mock/tinyllama always works. SHILATECH • Malibu Point 10880<br/>
-            {decisionLog && <span className="text-cyan-400 block mt-1">{decisionLog.slice(0, 200)}</span>}
-          </div>
-        </div>
-      )}
-
-      <div className="relative z-10 flex h-[calc(100vh-40px)]">
-        {/* Left panel — like screenshot left */}
-        <div className="w-[220px] border-r border-cyan-900/20 bg-black/40 p-3 flex flex-col gap-3 overflow-y-auto">
-          <div className="border border-cyan-900/30 rounded bg-black/60 p-2">
-            <div className="text-[10px] tracking-widest text-cyan-600 mb-2">SYSTEM • DEVICE SPECIFICATIONS</div>
-            <div className="text-[11px] space-y-1.5 text-slate-300">
-              <div className="flex justify-between"><span className="text-slate-500">Device</span><span>DESKTOP-3D8CN02</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">CPU</span><span className="text-[10px]">i5-6300U @ 2.40GHz</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">RAM</span><span>8.00 GB (7.41 usable)</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">System</span><span>64-bit x64</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">OS</span><span>Windows 11 Pro 21H2</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Engine</span><span className={online ? "text-emerald-400" : "text-amber-400"}>{engine.toUpperCase()} • {online ? "ONLINE" : "OFFLINE"}</span></div>
-            </div>
-          </div>
-
-          <div className="border border-cyan-900/30 rounded bg-black/60 p-2">
-            <div className="text-[10px] tracking-widest text-cyan-600 mb-2">TODAY'S ALIGNMENT • 3 MITS</div>
-            <div className="space-y-2">
-              {["Q4 Planning Brief", "Client Email Response", "Lab Diagnostics"].map((mit, i) => (
-                <div key={i} className="flex gap-2 text-[11px] py-1 border-b border-cyan-900/10 last:border-0">
-                  <div className="w-5 h-5 rounded-full border border-cyan-700 flex items-center justify-center text-[10px] flex-shrink-0">{i+1}</div>
-                  <div className="text-slate-300">{mit}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 text-[9px] text-slate-500">Good morning {userName}, Sir. 3 MITs to make today a win.</div>
-          </div>
-
-          <div className="border border-amber-900/20 rounded bg-black/60 p-2">
-            <div className="text-[10px] tracking-widest text-amber-600 mb-2">SECURITY • DATA PROTECTION</div>
-            <div className="text-[10px] space-y-1.5 text-slate-400 leading-relaxed">
-              <div className="flex gap-1.5"><span className="text-emerald-400">🔒</span> Local-first, private by default</div>
-              <div className="flex gap-1.5"><span className="text-emerald-400">📴</span> Offline: nothing leaves device</div>
-              <div className="flex gap-1.5"><span className="text-cyan-400">🌐</span> Online: only prompt sent to OpenAI API if you set key</div>
-              <div className="flex gap-1.5"><span className="text-cyan-400">🏠</span> Ollama local: LLM stays on device even online</div>
-              <div className="flex gap-1.5"><span className="text-slate-500">🛡️</span> No telemetry, Apache 2.0, open source</div>
-            </div>
-          </div>
-
-          <div className="mt-auto border border-cyan-900/10 rounded p-2 bg-black/30">
-            <div className="text-[9px] text-slate-600 leading-relaxed">
-              JARVIS v0.1.9 • Hybrid Online/Offline<br/>
-              Local-first • Auto Engine • Voice ready<br/>
-              SHILATECH • Malibu Point 10880<br/>
-              <span className={online ? "text-emerald-500" : "text-amber-500"}>{online ? "🌐 ONLINE FULL STACK" : "📴 OFFLINE BASIC"} • SECURE</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Center — Circular HUD like screenshot */}
-        <div className="flex-1 flex flex-col items-center justify-center relative bg-[#020208]">
-          {/* Circular HUD */}
-          <div className="relative">
-            <canvas ref={canvasRef} width={560} height={560} className="w-[560px] h-[560px]" />
-
-            {/* Overlays like screenshot — left/right data around circle */}
-            <div className="absolute top-[10%] left-[-80px] text-[10px] text-cyan-700 space-y-1">
-              <div>99% - Strength</div>
-              <div>Home WiFi - Source</div>
-              <div className="mt-4 text-[9px] text-slate-600">Jarvis list</div>
-              <div className="text-[8px] text-slate-700 space-y-0.5 mt-1">
-                <div>• backup themes</div>
-                <div>• backup control</div>
-                <div>• warning control</div>
-              </div>
-            </div>
-
-            <div className="absolute top-[15%] right-[-90px] text-[10px] text-slate-400 space-y-2">
-              <div className="border border-cyan-900/20 p-2 rounded bg-black/60 w-[160px]">
-                <div className="text-cyan-600 text-[9px] tracking-widest">WEATHER • NAIROBI</div>
-                <div className="text-[20px] font-bold text-cyan-300 mt-1">{weather.temp}</div>
-                <div className="text-[11px]">{weather.condition}</div>
-                <div className="text-[9px] text-slate-500 mt-1">High {weather.high} • Low {weather.low}</div>
-                <div className="text-[8px] text-slate-600 mt-2">Precipitation: 10% • Humidity: 65% • Wind: 5 mph</div>
-              </div>
-
-              <div className="border border-cyan-900/20 p-2 rounded bg-black/60 w-[160px]">
-                <div className="text-cyan-600 text-[9px]">SYSTEM • {online ? "ONLINE" : "OFFLINE"}</div>
-                <div className="text-[9px] space-y-1 mt-1">
-                  <div className="flex justify-between"><span>Engine</span><span className={online ? "text-emerald-400" : "text-amber-400"}>{engine.toUpperCase()}</span></div>
-                  <div className="flex justify-between"><span>Mode</span><span>{online ? "FULL STACK" : "BASIC"}</span></div>
-                  <div className="flex justify-between"><span>Security</span><span className="text-emerald-400">🔒 SECURE</span></div>
-                  <div className="flex justify-between"><span>Data</span><span className="text-emerald-400">{online ? "ENCRYPTED" : "LOCAL ONLY"}</span></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom info like screenshot */}
-            <div className="absolute bottom-[-10px] left-1/2 -translate-x-1/2 flex gap-6 text-[9px] text-slate-500">
-              <span>Trash - 44 items</span>
-              <span>Size - 248.95 MB</span>
-              <span>Source - AC Line</span>
-              <span>Power - 90%</span>
-              <span className={online ? "text-emerald-400" : "text-amber-400"}>{online ? "🌐 ONLINE" : "📴 OFFLINE"} • {engine.toUpperCase()}</span>
-            </div>
-          </div>
-
-          {/* Chat under circle — like Iron Man interactive */}
-          <div className="mt-8 w-[600px] max-w-[90%]">
-            <div className="border border-cyan-900/30 rounded bg-black/60 backdrop-blur p-3">
-              <div className="h-[120px] overflow-y-auto space-y-2 mb-2 text-[11px]">
-                {messages.length === 0 && (
-                  <div className="text-slate-500">
-                    Good morning {userName}, Sir. It's {time.toLocaleTimeString()} on {time.toLocaleDateString([], { weekday: "long" })}.<br/>
-                    Arc reactor at {arcPower.toFixed(1)}% — {online ? "Online full stack" : "Offline basic"} — {online ? "All systems nominal, data secure, encrypted channel" : "Local only, nothing leaves device, secure"}.
-                    <br/><br/>
-                    <span className={online ? "text-emerald-400" : "text-amber-400"}>{online ? "🌐 ONLINE MODE — Full stack" : "📴 OFFLINE MODE — Basic"} — Same interface, Sir. {online ? "Prompt sent to OpenAI API only if you set key, else Ollama local stays private." : "Nothing leaves device, offline mock."}</span>
-                    <br/><br/>
-                    <span className="text-cyan-400">🔊 Voice: {voiceEnabled ? "ON — JARVIS speaks both online & offline, Sir. Browser speechSynthesis offline + pyttsx3/kokoro offline backend" : "OFF"} • 🎤 Mic: click to speak — offline browser API</span>
-                  </div>
-                )}
-                {messages.map((m, i) => (
-                  <div key={i} className={m.role === "user" ? "text-emerald-300 text-right" : "text-cyan-300"}>
-                    <span className="text-[9px] text-slate-500">{m.role.toUpperCase()} • </span>{m.content.slice(0, 200)}
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && send()}
-                  placeholder={`Ask JARVIS... (Good morning ${userName}, network_status, hybrid_mode, brain dump...)`}
-                  className="flex-1 bg-black/80 border border-cyan-900/30 rounded px-3 py-1.5 text-[11px] text-cyan-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-700"
-                />
-                <button onClick={toggleListen} title="Voice input — offline browser API, works offline too, Sir" className={`px-3 py-1.5 rounded border text-[11px] font-bold ${isListening ? "bg-red-600 text-white border-red-500 animate-pulse" : "bg-black border-cyan-800 text-cyan-400 hover:bg-cyan-950"}`}>{isListening ? "● LISTENING" : "🎤"}</button>
-                <button onClick={() => setVoiceEnabled(v => !v)} title={voiceEnabled ? "Voice ON — JARVIS speaks both online/offline" : "Voice OFF"} className={`px-2 py-1.5 rounded border text-[10px] ${voiceEnabled ? (isSpeaking ? "bg-emerald-600 text-black border-emerald-500 animate-pulse" : "bg-emerald-950/50 border-emerald-700 text-emerald-400") : "bg-black border-slate-700 text-slate-500"}`}>{voiceEnabled ? (isSpeaking ? "🔊 SPEAKING" : "🔊 VOICE ON") : "🔇"}</button>
-                <button onClick={() => send()} className="px-4 py-1.5 rounded bg-cyan-600 text-black text-[11px] font-bold hover:bg-cyan-500">TRANSMIT</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right panel — related like screenshot */}
-        <div className="w-[240px] border-l border-cyan-900/20 bg-black/40 p-3 flex flex-col gap-3 overflow-y-auto">
-          <div className="text-[10px] tracking-widest text-slate-500">More images on this site</div>
-          <div className="grid grid-cols-3 gap-1.5">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="aspect-square rounded border border-cyan-900/20 bg-cyan-950/20 flex items-center justify-center">
-                <div className="w-6 h-6 rounded-full border border-cyan-700 bg-cyan-900/30 animate-pulse" />
-              </div>
-            ))}
-          </div>
-
-          <div className="border border-cyan-900/20 rounded p-2 bg-black/60">
-            <div className="text-[10px] tracking-widest text-slate-400 mb-2">Related searches</div>
-            <div className="space-y-1.5">
-              {[
-                "Iron Man Jarvis PC Wallpaper",
-                "Iron Man Jarvis Desktop Wallpaper",
-                "Iron Man Jarvis Desktop Theme",
-                "Iron Man Jarvis Wallpaper 4K",
-              ].map((s, i) => (
-                <button key={i} onClick={() => send(s)} className="w-full text-left text-[10px] px-2 py-1 rounded bg-black/40 border border-cyan-900/20 text-cyan-600 hover:bg-cyan-950/30 hover:text-cyan-400 flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full bg-cyan-900/50 flex items-center justify-center text-[8px]">◉</span> {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="border border-emerald-900/20 rounded p-2 bg-emerald-950/10">
-            <div className="text-[10px] tracking-widest text-emerald-600 mb-2">SECURITY • YOUR DATA</div>
-            <div className="text-[10px] space-y-2 text-slate-300 leading-relaxed">
-              <div>
-                <div className="text-emerald-400 font-bold">📴 Offline Mode — Basic</div>
-                <div className="text-[9px] text-slate-400">Nothing leaves device. Mock LLM + keyword memory + local calendar.json/email.json mock. 100% private, Sir. Always works.</div>
-              </div>
-              <div>
-                <div className="text-cyan-400 font-bold">🌐 Online Mode — Full Stack</div>
-                <div className="text-[9px] text-slate-400">Only prompt you type sent to OpenAI API if you set OPENAI_API_KEY. Or Ollama local — LLM stays on device even online, only search goes online if you use Tavily. Your choice, Sir.</div>
-              </div>
-              <div className="text-[9px] text-slate-500 border-t border-emerald-900/20 pt-2 mt-2">
-                <div>🔒 Local-first, private by default</div>
-                <div>🔒 No telemetry (disabled)</div>
-                <div>🔒 API keys from env, not stored in config.toml</div>
-                <div>🔒 Google OAuth token local ~/.jarvis/google_token.json</div>
-                <div>🔒 FAISS memory local ~/.jarvis/memory</div>
-                <div>🔒 Open source Apache 2.0</div>
-                <div className="mt-1 text-emerald-400">Same circular interface online/offline, Sir. Only badge changes.</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="border border-cyan-900/20 rounded p-2 bg-black/40">
-            <div className="text-[9px] text-slate-500 tracking-widest">QUICK PROTOCOLS</div>
-            <div className="grid grid-cols-2 gap-1 mt-2">
-              {[
-                ["DECIDE FULL", "__DECIDE_FULL__"],
-                ["DECIDE BASIC", "__DECIDE_BASIC__"],
-                ["ONLINE CHECK", "network_status status"],
-                ["HYBRID MODE", "hybrid_mode status"],
-                ["GOOD MORNING", `Good morning ${userName}`],
-                ["SECURITY", "How is my data secure?"],
-              ].map(([label, cmd]) => (
-                <button key={label} onClick={() => {
-                  if (cmd === "__DECIDE_FULL__") decide("1");
-                  else if (cmd === "__DECIDE_BASIC__") decide("2");
-                  else if (cmd.endsWith(" ")) setInput(cmd);
-                  else send(cmd);
-                }} className={`text-[8px] px-2 py-1 rounded bg-black/60 border text-cyan-700 hover:bg-cyan-950/40 hover:text-cyan-300 ${label.includes("FULL") ? "border-emerald-900/30 text-emerald-600" : label.includes("BASIC") ? "border-amber-900/30 text-amber-600" : "border-cyan-900/20"}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom bar like screenshot */}
-      <div className="relative z-10 flex items-center justify-between px-4 py-1.5 border-t border-cyan-900/20 bg-black/80 text-[9px] text-slate-500">
-        <div className="flex gap-4">
-          <span>Jarvis Iron Man Wallpaper 4K</span>
-          <span>Jarvis Iron Man Quotes</span>
-          <span>Jarvis Iron Man Hologram</span>
-        </div>
-        <div className="flex gap-4">
-          <span>Trash - 44 items • Size - 248.95 MB • Source - AC Line • Power - 90%</span>
-          <span className={online ? "text-emerald-400" : "text-amber-400"}>{online ? "🌐 ONLINE SECURE • ENCRYPTED" : "📴 OFFLINE SECURE • LOCAL ONLY"}</span>
-          <span>{time.toLocaleTimeString()} • {time.toLocaleDateString()}</span>
-        </div>
+    <div className="min-h-screen bg-[#02070d] text-cyan-100 font-mono relative overflow-x-hidden" style={{backgroundImage:"linear-gradient(rgba(6,182,212,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,.035) 1px, transparent 1px)", backgroundSize:"38px 38px"}}>
+      <header className="border-b border-cyan-800/40 bg-black/70 px-5 py-3 flex flex-wrap items-center justify-between gap-3 relative z-10">
+        <div className="flex items-center gap-3"><span className="text-cyan-400 tracking-[.35em] font-bold text-lg">J.A.R.V.I.S.</span><span className="text-[10px] text-slate-500 border border-cyan-900 px-2 py-1">LOCAL ASSISTANT</span></div>
+        <div className="flex items-center gap-4 text-[11px]"><span className="text-slate-400">{time.toLocaleDateString()} • {time.toLocaleTimeString()}</span><button onClick={checkStatus} className={`border px-3 py-1 rounded ${status === "ready" ? "border-emerald-600 text-emerald-400" : "border-amber-700 text-amber-400"}`} title="Recheck Ollama connection">● {statusLabel} ↻</button></div>
+      </header>
+      <div className="relative z-10 grid grid-cols-1 xl:grid-cols-[250px_minmax(400px,1fr)_360px] min-h-[calc(100vh-60px)]">
+        <aside className="p-4 border-r border-cyan-900/40 bg-black/40 space-y-4">
+          <section className="hud-panel"><h2>MODEL LINK</h2><div className="text-cyan-300 text-lg mt-3">qwen2.5:3b</div><p className="text-slate-400 text-[11px] mt-2">Connected locally through Ollama on this computer.</p><p className="mt-3 text-[11px] text-amber-400">{status === "model_missing" ? "Run: ollama pull qwen2.5:3b" : status === "unavailable" ? "Start Ollama and the JARVIS server." : status === "ready" ? "Model installed and ready to answer." : "Checking local model..."}</p></section>
+          <section className="hud-panel"><h2>TODAY’S THREE PRIORITIES</h2><div className="space-y-2 mt-3">{focusItems.length ? focusItems.map((item,i) => <div key={i} className="flex gap-2 items-start text-xs"><button className="text-cyan-400 border border-cyan-900 rounded-full w-5 h-5 shrink-0" title="Mark complete" onClick={() => setFocusItems(items => items.filter((_,j) => i !== j))}>✓</button><span>{item}</span></div>) : <p className="text-slate-500 text-[11px]">Set up to three things to focus on today.</p>}</div>{focusItems.length < 3 && <div className="flex gap-1 mt-3"><input className="hud-input min-w-0 w-full" value={newFocus} onChange={e => setNewFocus(e.target.value)} onKeyDown={e => e.key === "Enter" && addFocus()} placeholder="Add a priority"/><button onClick={addFocus} className="hud-button">+</button></div>}</section>
+          <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Use the microphone button for speech input. Spoken replies use your browser’s installed voice. Availability depends on your browser.</p><button className="hud-button mt-3" onClick={() => { setVoiceEnabled(v => !v); window.speechSynthesis?.cancel(); }}>{voiceEnabled ? "SPOKEN REPLIES ON" : "ENABLE SPOKEN REPLIES"}</button></section>
+        </aside>
+        <main className="flex flex-col items-center justify-center py-8 px-4 min-w-0">
+          <div className="text-cyan-600 tracking-[.3em] text-[10px] mb-2">INTERACTIVE REACTOR INTERFACE</div>
+          <div className="relative w-full max-w-[580px] aspect-square"><canvas ref={canvasRef} width={560} height={560} className="w-full h-full"/><div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="mt-[135px] text-[10px] tracking-[.3em] text-cyan-300/80">{busy ? "PROCESSING" : isListening ? "LISTENING" : status === "ready" ? "AWAITING COMMAND" : "LINK STANDBY"}</span></div></div>
+          <div className="flex flex-wrap gap-4 justify-center text-[10px] tracking-widest text-cyan-600 mt-2"><span>USER: {userName.toUpperCase()}</span><span>MODEL: QWEN 2.5 3B</span><span>ENGINE: OLLAMA</span></div>
+        </main>
+        <aside className="border-l border-cyan-900/40 bg-black/50 flex flex-col min-h-[500px] xl:h-[calc(100vh-60px)]">
+          <div className="p-4 border-b border-cyan-900/40"><h2 className="text-cyan-400 tracking-[.2em] text-xs">COMMUNICATIONS</h2><p className="text-slate-500 text-[11px] mt-2">Conversation stays in this window while it is open. Ollama runs locally.</p></div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[280px]" aria-live="polite">{!messages.length && <div className="text-slate-400 text-xs leading-6">Hello, {userName}. Ask me a question, plan your day, or talk through a task. I’ll use Qwen through your local Ollama installation.</div>}{messages.map((m,i) => <div key={i} className={`border-l-2 pl-3 text-xs leading-5 whitespace-pre-wrap break-words ${m.role === "user" ? "border-emerald-500 text-emerald-200" : "border-cyan-500 text-cyan-100"}`}><div className="text-[9px] tracking-widest text-slate-500 mb-1">{m.role === "user" ? "YOU" : "JARVIS"}</div>{m.content}</div>)}{busy && <div className="text-cyan-500 text-xs animate-pulse">JARVIS is thinking…</div>}<div ref={chatEnd}/></div>
+          <div className="p-4 border-t border-cyan-900/40 space-y-2">{error && <div className="text-amber-400 text-[11px]" role="alert">{error}</div>}<div className="flex gap-2"><input className="hud-input flex-1 min-w-0" aria-label="Message JARVIS" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask JARVIS…"/><button onClick={listen} className="hud-button" aria-label="Speak to JARVIS">{isListening ? "●" : "🎤"}</button><button onClick={() => send()} disabled={busy || !input.trim()} className="hud-button disabled:opacity-40">SEND</button></div><div className="text-[10px] text-slate-500">{status === "ready" ? "LOCAL MODEL READY" : "Connection required for AI replies"}</div></div>
+        </aside>
       </div>
     </div>
   );

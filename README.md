@@ -1,5 +1,35 @@
 # Jarvis desktop prototype
 
+## Circular JARVIS HUD with Ollama
+
+The circular cyan HUD opens by default in the React interface. Its chat uses
+**`qwen2.5:3b` through Ollama on your computer**. The status badge checks that
+Ollama is running and the model is installed. Conversation context is kept in
+the open browser window; the three priorities are saved in browser local storage.
+
+On Windows, install [Ollama](https://ollama.com/download), Python 3.10+ and
+Node.js, then double-click `deploy\windows\RUN-OLLAMA-HUD.bat`. The launcher
+pulls the model if needed, installs project dependencies, starts the API and
+web interface, and opens `http://localhost:5173`.
+
+To run it manually:
+
+```text
+ollama pull qwen2.5:3b
+python -m pip install -e .
+python -m uvicorn jarvis.server.api:app --host 127.0.0.1 --port 8000
+```
+
+In another terminal, run `cd frontend`, `npm ci`, then `npm run dev`. Open
+`http://localhost:5173`. Ollama normally starts in the background on Windows;
+if the badge shows **OLLAMA OFFLINE**, start the Ollama app. The browser microphone
+and spoken reply buttons depend on browser support and microphone permission.
+
+The HUD is a visual assistant with local conversation, voice controls, and a
+small priority list. Its chat does not yet operate devices, email, calendar, or
+desktop files, and it does not claim to have done those actions. The circular
+reactor is an interface graphic, not a live battery or machine diagnostic.
+
 A small Windows friendly desktop assistant built with Python's standard library. It can browse a local prompt library, prepare meeting briefs from details you paste, copy prompts, and ask an OpenAI compatible chat API to draft a response. The app runs without an API key in copy mode.
 
 ## Run

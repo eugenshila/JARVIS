@@ -24,6 +24,7 @@ export default defineConfig({
       '/skills': 'http://localhost:8000',
       '/telemetry': 'http://localhost:8000',
       '/engines': 'http://localhost:8000',
+      '/hud': 'http://localhost:8000',
     }
   },
   preview: {
