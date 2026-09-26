@@ -17,7 +17,7 @@ It contains:
 | `JARVIS-<version>-source.zip` | the complete source payload on its own |
 | `jarvis.exe`, `jarvis-desktop.exe` | the raw executables |
 
-A tag (`v0.1.10.1`) additionally publishes a GitHub Release with the same
+A tag (`vX.Y.Z`) additionally publishes a GitHub Release with the same
 files attached; the full workflow does the same with vector memory and web
 search bundled.
 
@@ -26,7 +26,7 @@ search bundled.
 Double-click the MSI, or from an elevated prompt:
 
 ```powershell
-msiexec /i JARVIS-0.1.10.0-x64.msi /l*v install.log
+msiexec /i JARVIS-0.1.10.1-x64.msi /l*v install.log
 ```
 
 It installs per-machine to `C:\Program Files\JARVIS SHILATECH\`, adds that
@@ -96,7 +96,7 @@ against the installed source.
 Start Menu → **Uninstall JARVIS SHILATECH**, or Settings → Apps, or:
 
 ```powershell
-msiexec /x JARVIS-0.1.10.0-x64.msi
+msiexec /x JARVIS-0.1.10.1-x64.msi
 ```
 
 Reinstalling the same version replaces the files rather than installing
