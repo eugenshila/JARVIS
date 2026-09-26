@@ -91,10 +91,12 @@ jobs:
         shell: pwsh
         run: |
           $files = (Get-ChildItem -Recurse -File dist/payload).Count
-          Write-Host "payload files in the installer: $files"
+          Write-Host "::notice::payload files inside the installer: $files"
           if ($files -lt 100) { throw "payload looks truncated ($files files)" }
           dist\jarvis.exe selftest
-          Get-ChildItem dist -File | Format-Table Name, Length
+          foreach ($f in Get-ChildItem dist -File) {
+            Write-Host "::notice::$($f.Name) — $([math]::Round($f.Length/1MB,1)) MB"
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

@@ -12,14 +12,21 @@ It contains:
 
 | File | What it is |
 |---|---|
-| `JARVIS-<version>-x64.msi` | the installer (~43 MB) |
+| `JARVIS-<version>-x64-lite.msi` | the installer (~43 MB) |
 | `JARVIS-<version>-onefile.zip` | both executables, no installer |
 | `JARVIS-<version>-source.zip` | the complete source payload on its own |
 | `jarvis.exe`, `jarvis-desktop.exe` | the raw executables |
 
-A tag (`vX.Y.Z`) additionally publishes a GitHub Release with the same
-files attached; the full workflow does the same with vector memory and web
-search bundled.
+A tag (`vX.Y.Z`) additionally publishes a GitHub Release, with **two**
+installers attached:
+
+| Asset | Size | Use it when |
+|---|---|---|
+| `JARVIS-<version>-x64-lite.msi` | ~43 MB | testing, or you will add extras with pip later |
+| `JARVIS-<version>-x64.msi` | ~528 MB | you want vector memory (FAISS, sentence-transformers) and web search bundled, no pip needed |
+
+Both carry the same complete source payload and pass the same selftest gate;
+they differ only in which Python extras are frozen into the executables.
 
 ## Install
 
