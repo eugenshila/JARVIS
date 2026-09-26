@@ -11,7 +11,7 @@ on:
       version:
         description: "Version"
         required: false
-        default: "0.1.10.0"
+        default: "0.1.10.1"
 
 jobs:
   build-light:
@@ -35,30 +35,31 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller==6.10.0
+          python -m pip install pyttsx3 sounddevice numpy
           python -m pip install -e .[server]
 
-      - name: Build EXE (onefile - modern circular HUD + voice auto-init)
+      - name: Build EXE (onefile - responsive Iron HUD + voice + clap wake)
         run: |
           python -m PyInstaller --onefile --name jarvis --console src/jarvis/cli/main.py --collect-all jarvis --add-data "configs;configs" --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.tools.network_tools --hidden-import jarvis.core.network --hidden-import jarvis.engine.auto_engine --hidden-import jarvis.agents.ironman --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico
-          python -m PyInstaller --onefile --name jarvis-desktop --windowed src/jarvis/cli/desktop_gui.py --collect-all jarvis --add-data "configs;configs" --add-data "app.py;." --add-data "prompts.py;." --add-data "client.py;." --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --icon assets/icon.ico --noconfirm
+          python -m PyInstaller --onefile --name jarvis-desktop --windowed src/jarvis/cli/desktop_gui.py --collect-all jarvis --add-data "configs;configs" --add-data "app.py;." --add-data "prompts.py;." --add-data "client.py;." --hidden-import jarvis.engine.vllm_engine --hidden-import jarvis.engine.mlx_engine --hidden-import jarvis.engine.litellm_engine --hidden-import jarvis.memory.vector_store --hidden-import jarvis.tools.search_tools --hidden-import jarvis.cli.gui_launcher --hidden-import pyttsx3 --hidden-import pyttsx3.drivers.sapi5 --hidden-import comtypes.client --hidden-import sounddevice --hidden-import numpy --collect-all sounddevice --icon assets/icon.ico --noconfirm
           dir dist
           Write-Host "=== Verify app.py bundled ==="
           python -c "import pathlib; print(list(pathlib.Path('dist').glob('*')))"
           # Check that jarvis-desktop.exe exists and size > 10MB
           if (Test-Path dist/jarvis-desktop.exe) { Write-Host "jarvis-desktop.exe OK $((Get-Item dist/jarvis-desktop.exe).Length / 1MB) MB" } else { Write-Error "jarvis-desktop.exe missing!" }
 
-      - name: Build MSI (onefile - modern circular HUD SHILATECH v0.1.9.8)
+      - name: Build MSI (onefile - responsive Iron HUD SHILATECH v0.1.10.1)
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
           if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
-          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.0" }
-          Write-Host "Building MSI v$version SHILATECH - modern circular HUD 13 72 ticks 60 segments voice auto-init"
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.1" }
+          Write-Host "Building MSI v$version SHILATECH - responsive Iron HUD 13 72 ticks 60 segments voice + clap wake controls"
           $wxs = @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
             <Product Id="*" Name="JARVIS - SHILATECH - Personal AI" Language="1033" Version="$version" Manufacturer="SHILATECH" UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH Modern Circular HUD 13 72 ticks 60 segments voice auto-init" />
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH Responsive Iron HUD 13 72 ticks 60 segments voice + clap wake controls" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." AllowSameVersionUpgrades="yes" />
               <MediaTemplate EmbedCab="yes" />
               <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
@@ -83,7 +84,7 @@ jobs:
                 <Directory Id="ProgramMenuFolder">
                   <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH">
                     <Component Id="StartMenuShortcuts" Guid="*">
-                      <Shortcut Id="DesktopShortcut" Name="JARVIS Desktop SHILATECH" Description="GUI stays open - Good Morning Eugene + voice" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" />
+                      <Shortcut Id="DesktopShortcut" Name="JARVIS Desktop SHILATECH" Description="GUI stays open - Good Morning Eugene + voice + clap wake" Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" />
                       <Shortcut Id="ChatShortcut" Name="JARVIS Chat" Description="CLI chat interactive" Target="[INSTALLFOLDER]jarvis.exe" Arguments="chat --interactive" WorkingDirectory="INSTALLFOLDER" />
                       <Shortcut Id="DoctorShortcut" Name="JARVIS Doctor" Description="System check" Target="[INSTALLFOLDER]jarvis.exe" Arguments="doctor" WorkingDirectory="INSTALLFOLDER" />
                       <RemoveFolder Id="CleanUp" Directory="ApplicationProgramsFolder" On="uninstall" />
@@ -112,7 +113,7 @@ jobs:
         run: |
           $version = "${{ github.event.inputs.version }}"
           if (-not $version) { $version = "${{ github.ref_name }}".TrimStart('v') }
-          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.0" }
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = "0.1.10.1" }
           New-Item -ItemType Directory -Force -Path "python-portable/JARVIS"
           Copy-Item -Recurse -Force src python-portable/JARVIS/
           Copy-Item -Force app.py,client.py,prompts.py,pyproject.toml,README.md,INSTALL.md python-portable/JARVIS/

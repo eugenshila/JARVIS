@@ -22,7 +22,7 @@ from jarvis.skills.registry import SkillRegistry
 from jarvis.telemetry.monitor import TelemetryStore
 
 
-app = FastAPI(title="JARVIS API", version="0.1.0", description="Personal AI, On Personal Devices")
+app = FastAPI(title="JARVIS API", version="0.1.10.1", description="Personal AI, On Personal Devices")
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,7 +56,7 @@ class MemoryAddRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "0.1.0", "time": time.time()}
+    return {"status": "ok", "version": "0.1.10.1", "time": time.time()}
 
 
 @app.get("/v1/models")
@@ -223,7 +223,7 @@ def memory_stats():
 def root():
     return {
         "name": "JARVIS",
-        "version": "0.1.0",
+        "version": "0.1.10.1",
         "description": "Personal AI, On Personal Devices",
         "docs": "/docs",
         "health": "/health",
