@@ -43,11 +43,13 @@ def cli(ctx: click.Context, verbose: bool):
 
 @cli.command()
 @click.argument("prompt", required=False)
-@click.option("--agent", "-a", default=None, help="Agent: simple, react, orchestrator, morning_digest, deep_research, code_assistant")
-@click.option("--engine", "-e", default=None, help="Engine: openai, ollama, mock, vllm, mlx, litellm, gemma_cpp")
+@click.option("--agent", "-a", default=None, help="Agent: simple, react, orchestrator, morning_digest, deep_research, code_assistant, ironman, adhd_coach")
+@click.option("--engine", "-e", default=None, help="Engine: openai, ollama, mock, vllm, mlx, litellm, gemma_cpp, auto (hybrid online/offline)")
+@click.option("--online-engine", default=None, help="Online engine for auto: auto, openai, ollama, vllm, mock")
+@click.option("--offline-engine", default=None, help="Offline engine for auto: mock, ollama")
 @click.option("--context", "-c", default="", help="Additional context")
 @click.option("--mock", is_flag=True, help="Use mock engine (offline demo)")
-def ask(prompt: str | None, agent: str | None, engine: str | None, context: str, mock: bool):
+def ask(prompt: str | None, agent: str | None, engine: str | None, online_engine: str | None, offline_engine: str | None, context: str, mock: bool):
     """Ask JARVIS a question (single-turn)."""
     from jarvis.agents.registry import get_agent
     from jarvis.core.types import EngineType
@@ -59,8 +61,22 @@ def ask(prompt: str | None, agent: str | None, engine: str | None, context: str,
         try:
             cfg.engine.type = EngineType(engine)
         except ValueError:
-            console.print(f"[red]Unknown engine {engine}. Available: openai, ollama, mock[/]")
-            return
+            if engine == "auto":
+                cfg.engine.type = EngineType.AUTO
+            else:
+                console.print(f"[red]Unknown engine {engine}. Available: openai, ollama, mock, auto[/]")
+                return
+        if engine == "auto":
+            if online_engine:
+                cfg.auto.online_engine = online_engine
+            if offline_engine:
+                cfg.auto.offline_engine = offline_engine
+            try:
+                from jarvis.core.network import get_auto_status
+                status = get_auto_status()
+                console.print(f"[dim]🌐 Network: {'Online' if status['network']['online'] else 'Offline'} via {status['network']['method']} | Selected: {status['selected']['engine']} — {status['selected']['mode']} | Reason: {status['selected']['reason']}[/]")
+            except:
+                pass
 
     if agent:
         cfg.preset = agent
@@ -80,13 +96,15 @@ def ask(prompt: str | None, agent: str | None, engine: str | None, context: str,
     except Exception as e:
         console.print(f"[red]Error: {e}[/]")
         if "OPENAI_API_KEY" in str(e):
-            console.print("[yellow]Tip: set OPENAI_API_KEY or use --mock or --engine ollama[/]")
+            console.print("[yellow]Tip: set OPENAI_API_KEY or use --mock or --engine ollama or --engine auto[/]")
 
 
 @cli.command()
 @click.option("--agent", "-a", default=None, help="Agent preset")
-@click.option("--engine", "-e", default=None, help="Engine type")
-def chat(agent: str | None, engine: str | None):
+@click.option("--engine", "-e", default=None, help="Engine type: openai, ollama, mock, auto")
+@click.option("--online-engine", default=None, help="Online engine for auto")
+@click.option("--offline-engine", default=None, help="Offline engine for auto")
+def chat(agent: str | None, engine: str | None, online_engine: str | None, offline_engine: str | None):
     """Start interactive chat."""
     from jarvis.agents.registry import get_agent
     from jarvis.core.types import EngineType, Message, Role
@@ -723,6 +741,52 @@ def daemon(mode: str, name: str, engine: str, no_voice: bool):
             daemon.run_loop()
         except Exception as e2:
             console.print(f"[red]Daemon failed: {e2}[/]")
+
+
+@cli.command()
+@click.option("--action", default="status", help="Action: status, check, engines")
+def online(action: str):
+    """Check hybrid online/offline status — auto engine selection."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("network_status")
+    if tool:
+        console.print(Panel(Markdown(tool.run(action=action)), title="Hybrid Online/Offline Status", border_style="green"))
+    else:
+        try:
+            from jarvis.core.network import get_auto_status
+            status = get_auto_status()
+            console.print(Panel(f"Network: {'Online' if status['network']['online'] else 'Offline'} via {status['network']['method']}\nSelected: {status['selected']['engine']} — {status['selected']['mode']}\nReason: {status['selected']['reason']}", title="Hybrid Status"))
+        except Exception as e:
+            console.print(f"[red]Failed: {e}[/]")
+
+
+@cli.command(name="network")
+@click.option("--action", default="status", help="Action: status, check, engines")
+def network_cmd(action: str):
+    """Network status — same as online."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("network_status")
+    if tool:
+        console.print(Panel(Markdown(tool.run(action=action)), title="Network Status", border_style="blue"))
+    else:
+        console.print("[red]Network tool not available[/]")
+
+
+@cli.command(name="hybrid")
+@click.option("--action", default="status", help="Action: status, set, enable, disable")
+@click.option("--online-engine", default="auto", help="Online engine: auto, openai, ollama, vllm, mock")
+@click.option("--offline-engine", default="mock", help="Offline engine: mock, ollama")
+def hybrid_cmd(action: str, online_engine: str, offline_engine: str):
+    """Hybrid mode config — online full stack vs offline basic."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("hybrid_mode")
+    if tool:
+        console.print(Panel(Markdown(tool.run(action=action, online_engine=online_engine, offline_engine=offline_engine)), title="Hybrid Mode", border_style="cyan"))
+    else:
+        console.print("[red]Hybrid tool not available[/]")
 
 
 @cli.command()

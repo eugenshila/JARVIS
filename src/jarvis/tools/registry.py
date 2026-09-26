@@ -200,6 +200,19 @@ try:
 except ImportError:
     HAS_GOOGLE = False
 
+try:
+    from jarvis.tools.network_tools import NetworkStatusTool, HybridModeTool
+    HAS_NETWORK = True
+except ImportError:
+    HAS_NETWORK = False
+
+if HAS_NETWORK:
+    REGISTRY.update({
+        "network_status": NetworkStatusTool,
+        "online_status": NetworkStatusTool,
+        "hybrid_mode": HybridModeTool,
+    })
+
 
 def get_tool(name: str) -> BaseTool | None:
     cls = REGISTRY.get(name)

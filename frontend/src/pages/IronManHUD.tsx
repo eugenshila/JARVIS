@@ -22,10 +22,62 @@ export default function IronManHUD() {
     {from:'Newsletter', subject:'Weekly digest', unread:false},
   ])
   const [energyPattern, setEnergyPattern] = useState('High focus 10-11am — MIT 1 then')
+  const [onlineStatus, setOnlineStatus] = useState<{online:boolean, engine:string, mode:string, latency?:number}>({online: typeof navigator !== "undefined" ? navigator.onLine : true, engine: 'auto', mode: 'CHECKING'})
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const waveformRef = useRef<HTMLCanvasElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
+
+  // Online/offline detection + auto engine
+  useEffect(()=>{
+    const checkOnline = async () => {
+      const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true
+      let engine = 'mock'
+      let mode = 'BASIC OFFLINE'
+      let latency: number | undefined
+
+      if (isOnline) {
+        try {
+          const start = Date.now()
+          const res = await fetch('/run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({prompt: 'network_status check', agent: 'ironman', engine: 'mock'})
+          })
+          const data = await res.json()
+          if (data.content) {
+            const content = data.content as string
+            if (content.includes('ONLINE')) {
+              engine = content.includes('openai') ? 'openai' : content.includes('ollama') ? 'ollama' : 'mock'
+              mode = engine === 'openai' ? 'FULL STACK ONLINE' : engine === 'ollama' ? 'FULL LOCAL ONLINE' : 'ONLINE BUT BASIC'
+            }
+          }
+          latency = Date.now() - start
+        } catch {
+          engine = 'mock'
+          mode = 'ONLINE BUT BASIC'
+        }
+      }
+
+      setOnlineStatus({online: isOnline, engine, mode, latency})
+      setSystemStatus(s=> ({...s, net: isOnline ? 89 : 0}))
+    }
+
+    checkOnline()
+    if (typeof window !== "undefined") {
+      window.addEventListener('online', checkOnline)
+      window.addEventListener('offline', checkOnline)
+    }
+    const id = setInterval(checkOnline, 30000)
+
+    return ()=>{
+      if (typeof window !== "undefined") {
+        window.removeEventListener('online', checkOnline)
+        window.removeEventListener('offline', checkOnline)
+      }
+      clearInterval(id)
+    }
+  }, [])
 
   // Clock + arc reactor pulse
   useEffect(()=>{
@@ -375,6 +427,20 @@ export default function IronManHUD() {
         
         <div style={{display:'flex', alignItems:'center', gap:16, fontSize:11}}>
           <div>USER: {userName.toUpperCase()}</div>
+          <div style={{display:'flex', alignItems:'center', gap:6}}>
+            <span style={{
+              padding:'3px 8px', 
+              background: onlineStatus.online ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)', 
+              border:`1px solid ${onlineStatus.online ? '#22c55e' : '#ef4444'}`, 
+              borderRadius:4,
+              color: onlineStatus.online ? '#22c55e' : '#fca5a5',
+              display:'flex', alignItems:'center', gap:4
+            }}>
+              <span style={{width:6, height:6, borderRadius:'50%', background: onlineStatus.online ? '#22c55e' : '#ef4444', display:'inline-block', boxShadow: `0 0 5px ${onlineStatus.online ? '#22c55e' : '#ef4444'}`}} />
+              {onlineStatus.online ? `ONLINE ${onlineStatus.engine.toUpperCase()} ${onlineStatus.latency ? onlineStatus.latency+'ms' : ''}` : 'OFFLINE BASIC'}
+            </span>
+            <span style={{padding:'3px 8px', background:'rgba(34,197,94,0.2)', border:'1px solid #22c55e', borderRadius:4, fontSize:9}}>{onlineStatus.mode}</span>
+          </div>
           <div style={{display:'flex', gap:8}}>
             <span style={{padding:'3px 8px', background:'rgba(34,197,94,0.2)', border:'1px solid #22c55e', borderRadius:4}}>CPU {systemStatus.cpu.toFixed(0)}%</span>
             <span style={{padding:'3px 8px', background:'rgba(34,211,238,0.2)', border:'1px solid #22d3ee', borderRadius:4, color:'#22d3ee'}}>MEM {systemStatus.mem.toFixed(0)}%</span>

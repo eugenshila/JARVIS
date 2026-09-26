@@ -56,6 +56,7 @@ class EngineType(str, Enum):
     MLX = "mlx"
     LITELLM = "litellm"
     GEMMA_CPP = "gemma_cpp"
+    AUTO = "auto"
 
 
 @dataclass

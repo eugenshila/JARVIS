@@ -68,9 +68,18 @@ PRESETS: dict[str, AgentPreset] = {
 
 
 @dataclass
+class AutoConfig:
+    online_engine: str = "auto"  # auto, openai, ollama, vllm, mlx, mock
+    offline_engine: str = "mock"  # mock, ollama
+    cache_seconds: int = 30
+    enabled: bool = True
+
+
+@dataclass
 class JarvisConfig:
     home: Path = field(default_factory=get_home)
     engine: EngineConfig = field(default_factory=EngineConfig)
+    auto: AutoConfig = field(default_factory=AutoConfig)
     preset: str = "chat-simple"
     telemetry_enabled: bool = False
     data_dir: Path | None = None
@@ -101,13 +110,29 @@ class JarvisConfig:
             data = tomllib.loads(text)
             eng = data.get("engine", {})
             if eng:
+                try:
+                    eng_type = EngineType(eng.get("type", "openai"))
+                except ValueError:
+                    eng_type_str = eng.get("type", "openai")
+                    if eng_type_str == "auto":
+                        eng_type = EngineType.AUTO
+                    else:
+                        eng_type = EngineType(eng_type_str) if eng_type_str in [e.value for e in EngineType] else EngineType.OPENAI
                 cfg.engine = EngineConfig(
-                    type=EngineType(eng.get("type", "openai")),
+                    type=eng_type,
                     model=eng.get("model", cfg.engine.model),
                     api_url=eng.get("api_url", cfg.engine.api_url),
                     api_key=eng.get("api_key", cfg.engine.api_key),
                     temperature=eng.get("temperature", 0.7),
                     max_tokens=eng.get("max_tokens", 2048),
+                )
+            auto_cfg = data.get("auto", {})
+            if auto_cfg:
+                cfg.auto = AutoConfig(
+                    online_engine=auto_cfg.get("online_engine", "auto"),
+                    offline_engine=auto_cfg.get("offline_engine", "mock"),
+                    cache_seconds=auto_cfg.get("cache_seconds", 30),
+                    enabled=auto_cfg.get("enabled", True),
                 )
             cfg.preset = data.get("preset", cfg.preset)
             cfg.telemetry_enabled = data.get("telemetry", {}).get("enabled", False)
@@ -126,9 +151,16 @@ class JarvisConfig:
         eng["temperature"] = self.engine.temperature
         eng["max_tokens"] = self.engine.max_tokens
         if self.engine.api_key and len(self.engine.api_key) > 8:
-            # don't write key to disk by default; keep env-based
             eng.add(tomlkit.comment("api_key is read from OPENAI_API_KEY env"))
         doc["engine"] = eng
+        auto_tbl = tomlkit.table()
+        auto_tbl["online_engine"] = self.auto.online_engine
+        auto_tbl["offline_engine"] = self.auto.offline_engine
+        auto_tbl["cache_seconds"] = self.auto.cache_seconds
+        auto_tbl["enabled"] = self.auto.enabled
+        auto_tbl.add(tomlkit.comment("Hybrid mode: online=full stack (openai/ollama), offline=basic (mock/ollama)"))
+        auto_tbl.add(tomlkit.comment("For i5-6300U 8GB: online=openai best, offline=mock or ollama tinyllama"))
+        doc["auto"] = auto_tbl
         tel = tomlkit.table()
         tel["enabled"] = self.telemetry_enabled
         doc["telemetry"] = tel

@@ -41,7 +41,15 @@ def _try_import_gemma(cfg):
         raise RuntimeError(f"Gemma engine unavailable: {e}")
 
 
-def get_engine(config: JarvisConfig | EngineConfig | None = None, engine_type: str | None = None) -> BaseEngine:
+def _try_import_auto(cfg, online_engine="auto", offline_engine="mock"):
+    try:
+        from jarvis.engine.auto_engine import AutoEngine
+        return AutoEngine(cfg, online_engine=online_engine, offline_engine=offline_engine)
+    except Exception as e:
+        raise RuntimeError(f"Auto engine unavailable: {e}")
+
+
+def get_engine(config: JarvisConfig | EngineConfig | None = None, engine_type: str | None = None, online_engine: str = "auto", offline_engine: str = "mock") -> BaseEngine:
     if isinstance(config, JarvisConfig):
         eng_cfg = config.engine
     elif isinstance(config, EngineConfig):
@@ -75,6 +83,8 @@ def get_engine(config: JarvisConfig | EngineConfig | None = None, engine_type: s
         return _try_import_litellm(eng_cfg)
     if t in ("gemma_cpp", "gemma"):
         return _try_import_gemma(eng_cfg)
+    if t == "auto":
+        return _try_import_auto(eng_cfg, online_engine=online_engine, offline_engine=offline_engine)
 
     # default openai-compatible (also handles anthropic via compatible endpoint)
     return OpenAICompatibleEngine(eng_cfg)
