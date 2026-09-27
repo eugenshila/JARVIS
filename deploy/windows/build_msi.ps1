@@ -30,10 +30,10 @@ $wxs = @"
 <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
 <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 <MediaTemplate EmbedCab="yes" />
-<Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1"><ComponentRef Id="MainExecutable" /><ComponentRef Id="StartMenuShortcut" /></Feature>
+<Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1"><ComponentRef Id="MainExecutable" /><ComponentRef Id="StartMenuShortcut" /><ComponentRef Id="AutoStart" /></Feature>
 <UIRef Id="WixUI_InstallDir" /><Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 <Directory Id="TARGETDIR" Name="SourceDir"><Directory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH"><Component Id="MainExecutable" Guid="*"><File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" /></Component></Directory></Directory>
-<Directory Id="ProgramMenuFolder"><Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH"><Component Id="StartMenuShortcut" Guid="*"><Shortcut Id="StartMenuShortcut" Name="JARVIS SHILATECH" Description="Local JARVIS voice assistant" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" /><Shortcut Id="UninstallProduct" Name="Uninstall JARVIS" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" /><RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" /><RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" /></Component></Directory></Directory>
+<Directory Id="StartupFolder" Name="Startup" />\n<Directory Id="ProgramMenuFolder"><Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH"><Component Id="StartMenuShortcut" Guid="*"><Shortcut Id="StartMenuShortcut" Name="JARVIS SHILATECH" Description="Local JARVIS voice assistant" Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" /><Shortcut Id="UninstallProduct" Name="Uninstall JARVIS" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" /><RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" /><RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes" /></Component></Directory></Directory>
 </Directory>
 </Product></Wix>
 "@
