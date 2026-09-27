@@ -353,6 +353,11 @@ WantedBy=default.target
             if jarvis_bin:
                 return f"{jarvis_bin} adhd --engine mock"
             return f"{sys.executable} -m jarvis.cli.main adhd --engine mock"
+        elif mode in ("handsfree", "voice"):
+            companion = shutil.which("jarvis-hud-companion")
+            if companion:
+                return f"{companion} --hands-free"
+            return f"{sys.executable} -m jarvis.startup.hud_companion --hands-free"
         elif mode == "server":
             if jarvis_bin:
                 return f"{jarvis_bin} serve"
