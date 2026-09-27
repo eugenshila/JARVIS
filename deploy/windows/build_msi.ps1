@@ -5,7 +5,13 @@ Write-Host "=== Building JARVIS SHILATECH $Version ===" -ForegroundColor Green
 if (-not (Get-Command $PythonExe -ErrorAction SilentlyContinue)) { throw "Python 3.10+ not found." }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "Node.js/npm not found." }
 $wix = $null
-$candidates = @("\${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin","\${env:ProgramFiles}\WiX Toolset v3.11\bin","C:\tools\wix")
+$candidates = @(
+  (Join-Path ${env:ProgramFiles(x86)} "WiX Toolset v3.14\bin"),
+  (Join-Path ${env:ProgramFiles(x86)} "WiX Toolset v3.11\bin"),
+  (Join-Path ${env:ProgramFiles} "WiX Toolset v3.14\bin"),
+  (Join-Path ${env:ProgramFiles} "WiX Toolset v3.11\bin"),
+  "C:\tools\wix"
+)
 foreach ($dir in $candidates) { if (Test-Path (Join-Path $dir "candle.exe")) { $wix = $dir; break } }
 if (-not $wix) { throw "WiX Toolset v3.x is required to produce the MSI." }
 $env:PATH += ";$wix"
