@@ -1,17 +1,14 @@
-"""Optional Windows HUD companion: spoken greeting and double-clap activation.
-
-This process runs in the signed-in user's session. It never sends microphone
-audio to the backend. A double clap opens the local HUD; chat voice input still
-uses the browser's microphone button.
-"""
+"""Windows hands-free JARVIS companion: double-clap wake, local STT and voice response."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
 import time
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -22,21 +19,16 @@ STARTUP_NAME = "JARVIS-HUD.bat"
 class DoubleClap:
     def __init__(self, threshold: float = 0.18):
         self.threshold = threshold
-        self.last_peak = 0.0
         self.first_clap = 0.0
         self.active_since = 0.0
-        self.quiet_since = 0.0
 
     def feed(self, peak: float, now: float) -> bool:
-        """Return true on two short, separated transients within 1.1 seconds."""
         if peak >= self.threshold:
             if not self.active_since:
                 self.active_since = now
             if now - self.active_since > 0.18:
-                self.first_clap = 0.0  # sustained noise or speech
-            self.quiet_since = 0.0
+                self.first_clap = 0.0
             return False
-
         if self.active_since:
             duration = now - self.active_since
             self.active_since = 0.0
@@ -53,16 +45,22 @@ class DoubleClap:
 def speak(text: str) -> None:
     if sys.platform != "win32":
         return
-    # Uses an installed Windows SAPI voice; it does not copy an actor's voice.
     escaped = text.replace("'", "''")
-    script = ("Add-Type -AssemblyName System.Speech; "
-              "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-              "$v=$s.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -eq 'en-GB' } | Select-Object -First 1; "
-              "if($v){$s.SelectVoice($v.VoiceInfo.Name)}; "
-              f"$s.Speak('{escaped}')")
+    script = (
+        "Add-Type -AssemblyName System.Speech; "
+        "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        "$v=$s.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -eq 'en-GB' } | "
+        "Select-Object -First 1; if($v){$s.SelectVoice($v.VoiceInfo.Name)}; "
+        f"$s.Speak('{escaped}')"
+    )
     try:
-        subprocess.run(["powershell", "-NoProfile", "-Command", script], timeout=25, check=False,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            timeout=25,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except (OSError, subprocess.TimeoutExpired):
         pass
 
@@ -89,7 +87,7 @@ def listen_for_hands_free() -> None:
         import numpy as np
         from faster_whisper import WhisperModel
     except ImportError as exc:
-        raise RuntimeError("Install voice support: pip install faster-whisper sounddevice numpy") from exc
+        raise RuntimeError("Install voice support: pip install -e .[voice]") from exc
 
     threshold = float(os.environ.get("JARVIS_CLAP_THRESHOLD", "0.18"))
     detector = DoubleClap(threshold)
@@ -111,8 +109,12 @@ def listen_for_hands_free() -> None:
             time.sleep(0.6)
             try:
                 duration = float(os.environ.get("JARVIS_LISTEN_SECONDS", "8"))
-                audio = sd.rec(int(max(2, min(duration, 20)) * 16000), samplerate=16000,
-                               channels=1, dtype="float32")
+                audio = sd.rec(
+                    int(max(2, min(duration, 20)) * 16000),
+                    samplerate=16000,
+                    channels=1,
+                    dtype="float32",
+                )
                 sd.wait()
                 samples = np.asarray(audio[:, 0], dtype=np.float32)
                 if float(np.max(np.abs(samples))) < 0.012:
@@ -125,7 +127,8 @@ def listen_for_hands_free() -> None:
                     continue
                 payload = json.dumps({"messages": [{"role": "user", "content": command}]}).encode("utf-8")
                 request = urllib.request.Request(
-                    f"{HUD_URL.rstrip('/')}/hud/chat", data=payload,
+                    f"{HUD_URL.rstrip('/')}/hud/chat",
+                    data=payload,
                     headers={"Content-Type": "application/json"},
                 )
                 with urllib.request.urlopen(request, timeout=120) as response:
@@ -142,10 +145,7 @@ def listen_for_claps() -> None:
         import sounddevice as sd
     except ImportError as exc:
         raise RuntimeError("Microphone support missing. Install with: python -m pip install sounddevice") from exc
-
-    threshold = float(os.environ.get("JARVIS_CLAP_THRESHOLD", "0.18"))
-    detector = DoubleClap(threshold)
-    print(f"JARVIS double-clap wake is listening (threshold {threshold:.2f}). Press Ctrl+C to stop.", flush=True)
+    detector = DoubleClap(float(os.environ.get("JARVIS_CLAP_THRESHOLD", "0.18")))
     with sd.InputStream(channels=1, samplerate=16000, blocksize=800) as microphone:
         while True:
             samples, overflowed = microphone.read(800)
@@ -153,14 +153,13 @@ def listen_for_claps() -> None:
                 continue
             peak = max(abs(float(value[0])) for value in samples)
             if detector.feed(peak, time.monotonic()):
-                print("Double clap detected. Opening JARVIS HUD.", flush=True)
                 webbrowser.open(HUD_URL)
                 speak("At your service, Eugene.")
-                time.sleep(2)  # Ignore the computer's own greeting.
+                time.sleep(2)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="JARVIS HUD Windows companion")
+    parser = argparse.ArgumentParser(description="JARVIS Windows companion")
     parser.add_argument("--install-startup", type=Path, metavar="LAUNCHER")
     parser.add_argument("--remove-startup", action="store_true")
     parser.add_argument("--greet", action="store_true")
@@ -171,14 +170,14 @@ def main() -> None:
         print(f"JARVIS will launch after Windows sign-in: {install_startup(args.install_startup)}")
     elif args.remove_startup:
         startup_path().unlink(missing_ok=True)
-        print("JARVIS HUD sign-in startup removed.")
-    else:
-        if args.greet:
-            speak("JARVIS online. Good day, Eugene. Local systems are ready.")
+    elif args.greet:
+        speak("JARVIS online. Good day, Eugene. Local systems are ready.")
         if args.hands_free:
             listen_for_hands_free()
-        elif args.clap:
-            listen_for_claps()
+    elif args.hands_free:
+        listen_for_hands_free()
+    elif args.clap:
+        listen_for_claps()
 
 
 if __name__ == "__main__":
