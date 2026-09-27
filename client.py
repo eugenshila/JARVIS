@@ -7,6 +7,12 @@ from urllib.error import HTTPError, URLError
 
 
 def generate(prompt: str, context: str) -> str:
+    # Keep local smoke tests and offline development network-free.  The MSI
+    # itself uses the packaged JARVIS API, but this small compatibility client
+    # is still used by the desktop source launcher.
+    if os.environ.get("JARVIS_MOCK") == "1":
+        return f"MOCK response: {prompt}"
+
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not key:
         raise ValueError("Set OPENAI_API_KEY to enable AI responses, or use Copy prompt.")
