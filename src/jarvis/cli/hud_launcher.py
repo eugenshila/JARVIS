@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
+import shutil
 import socket
+import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -33,6 +36,38 @@ def _responding() -> bool:
         return False
 
 
+def _ollama_responding() -> bool:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=1.0):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
+def _ensure_ollama() -> None:
+    """Start local Ollama when installed but not already running."""
+    if _ollama_responding():
+        _log("Ollama already running")
+        return
+    executable = shutil.which("ollama")
+    if not executable:
+        _log("Ollama executable not found; HUD will show Ollama offline")
+        return
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    try:
+        subprocess.Popen([executable, "serve"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=creationflags, close_fds=sys.platform != "win32")
+        for _ in range(30):
+            if _ollama_responding():
+                _log("Ollama service started automatically")
+                return
+            time.sleep(0.5)
+        _log("Ollama launched but did not become ready within 15 seconds")
+    except OSError as exc:
+        _log(f"Could not start Ollama: {type(exc).__name__}: {exc}")
+
+
 def _run_server() -> None:
     import uvicorn
 
@@ -50,6 +85,8 @@ def main() -> None:
     if _responding():
         webbrowser.open(URL)
         return
+
+    _ensure_ollama()
 
     thread = threading.Thread(target=_run_server, daemon=True, name="jarvis-api")
     thread.start()
