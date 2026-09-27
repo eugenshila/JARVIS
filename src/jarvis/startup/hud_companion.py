@@ -83,6 +83,60 @@ def install_startup(launcher: Path) -> Path:
     return destination
 
 
+def listen_for_hands_free() -> None:
+    try:
+        import sounddevice as sd
+        import numpy as np
+        from faster_whisper import WhisperModel
+    except ImportError as exc:
+        raise RuntimeError("Install voice support: pip install faster-whisper sounddevice numpy") from exc
+
+    threshold = float(os.environ.get("JARVIS_CLAP_THRESHOLD", "0.18"))
+    detector = DoubleClap(threshold)
+    model = WhisperModel(
+        os.environ.get("JARVIS_WHISPER_MODEL", "base.en"),
+        device=os.environ.get("JARVIS_WHISPER_DEVICE", "cpu"),
+        compute_type=os.environ.get("JARVIS_WHISPER_COMPUTE", "int8"),
+    )
+    speak("JARVIS online. Hands-free voice control is ready, Sir.")
+    with sd.InputStream(channels=1, samplerate=16000, blocksize=800) as microphone:
+        while True:
+            samples, overflowed = microphone.read(800)
+            if overflowed:
+                continue
+            peak = max(abs(float(value[0])) for value in samples)
+            if not detector.feed(peak, time.monotonic()):
+                continue
+            speak("Yes, Sir.")
+            time.sleep(0.6)
+            try:
+                duration = float(os.environ.get("JARVIS_LISTEN_SECONDS", "8"))
+                audio = sd.rec(int(max(2, min(duration, 20)) * 16000), samplerate=16000,
+                               channels=1, dtype="float32")
+                sd.wait()
+                samples = np.asarray(audio[:, 0], dtype=np.float32)
+                if float(np.max(np.abs(samples))) < 0.012:
+                    speak("I didn't catch that, Sir.")
+                    continue
+                segments, _ = model.transcribe(samples, language="en", vad_filter=True)
+                command = " ".join(s.text.strip() for s in segments).strip()
+                if not command:
+                    speak("I didn't catch that, Sir.")
+                    continue
+                payload = json.dumps({"messages": [{"role": "user", "content": command}]}).encode("utf-8")
+                request = urllib.request.Request(
+                    f"{HUD_URL.rstrip('/')}/hud/chat", data=payload,
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    answer = str(json.load(response).get("content", "")).strip()
+                print(f"You: {command}\nJARVIS: {answer}", flush=True)
+                speak(answer)
+            except Exception as exc:
+                print(f"Voice error: {exc}", file=sys.stderr, flush=True)
+                speak("I encountered a local voice system error, Sir.")
+
+
 def listen_for_claps() -> None:
     try:
         import sounddevice as sd
@@ -111,6 +165,7 @@ def main() -> None:
     parser.add_argument("--remove-startup", action="store_true")
     parser.add_argument("--greet", action="store_true")
     parser.add_argument("--clap", action="store_true")
+    parser.add_argument("--hands-free", action="store_true")
     args = parser.parse_args()
     if args.install_startup:
         print(f"JARVIS will launch after Windows sign-in: {install_startup(args.install_startup)}")
@@ -120,7 +175,9 @@ def main() -> None:
     else:
         if args.greet:
             speak("JARVIS online. Good day, Eugene. Local systems are ready.")
-        if args.clap:
+        if args.hands_free:
+            listen_for_hands_free()
+        elif args.clap:
             listen_for_claps()
 
 
