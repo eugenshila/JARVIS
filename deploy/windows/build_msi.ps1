@@ -19,7 +19,7 @@ if (-not $SkipDeps) {
 }
 if (-not (Test-Path "frontend\dist\index.html")) { throw "frontend/dist/index.html is missing." }
 Remove-Item -Recurse -Force dist,build -ErrorAction SilentlyContinue
-$pyArgs = @("--onefile","--console","--name","jarvis","--add-data","src/jarvis;jarvis","--add-data","configs;configs","--add-data","frontend/dist;frontend/dist","--collect-all","jarvis","--hidden-import","jarvis.startup.windows_boot","--hidden-import","jarvis.startup.hud_companion","--hidden-import","faster_whisper","--hidden-import","sounddevice","--hidden-import","numpy","src/jarvis/startup/windows_boot.py")
+$pyArgs = @("--onefile","--console","--name","jarvis","--add-data","src/jarvis;jarvis","--add-data","configs;configs","--add-data","frontend/dist;frontend/dist","--collect-all","jarvis","--collect-all","faster_whisper","--collect-all","ctranslate2","--hidden-import","jarvis.startup.windows_boot","--hidden-import","jarvis.startup.hud_companion","--hidden-import","faster_whisper","--hidden-import","sounddevice","--hidden-import","numpy","src/jarvis/startup/windows_boot.py")
 if (Test-Path "assets/icon.ico") { $pyArgs = @("--icon","assets/icon.ico") + $pyArgs }
 & $PythonExe -m PyInstaller @pyArgs
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path "dist\jarvis.exe")) { throw "PyInstaller build failed." }
