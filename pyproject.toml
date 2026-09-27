@@ -83,7 +83,7 @@ windows = [
 [project.scripts]
 jarvis = "jarvis.cli.main:cli"
 jarvis-desktop = "app:main"
-jarvis-server = "jarvis.server.api:serve_cli"
+jarvis-server = "jarvis.server.api:serve_cli"\njarvis-hud-companion = "jarvis.startup.hud_companion:main"\njarvis-windows = "jarvis.startup.windows_boot:main"
 
 [project.urls]
 Homepage = "https://github.com/open-jarvis/OpenJarvis"
