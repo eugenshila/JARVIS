@@ -31,30 +31,42 @@ jobs:
       - name: Prepare WiX
         shell: powershell
         run: |
-          $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
-          if ($null -eq $candle) {
-            $wixBin = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*" -Directory -ErrorAction SilentlyContinue |
-              ForEach-Object { Join-Path $_.FullName "bin" } |
-              Where-Object { Test-Path (Join-Path $_ "candle.exe") } |
-              Select-Object -First 1
-            if ($wixBin) {
-              Add-Content $env:GITHUB_PATH $wixBin
-            } else {
-              choco install wixtoolset -y --no-progress
+          $ErrorActionPreference = 'Stop'
+          $wixBin = $null
+          $roots = @(
+            'C:\Program Files (x86)\WiX Toolset v3.14\bin',
+            'C:\Program Files (x86)\WiX Toolset v3.11\bin',
+            'C:\Program Files\WiX Toolset v3.14\bin',
+            'C:\Program Files\WiX Toolset v3.11\bin'
+          )
+          foreach ($candidate in $roots) {
+            if (Test-Path (Join-Path $candidate 'candle.exe')) { $wixBin = $candidate; break }
+          }
+          if (-not $wixBin) {
+            choco install wixtoolset --no-progress --yes
+            if ($LASTEXITCODE -ne 0) { throw "Chocolatey could not install WiX Toolset." }
+            foreach ($candidate in $roots) {
+              if (Test-Path (Join-Path $candidate 'candle.exe')) { $wixBin = $candidate; break }
             }
           }
-          if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
-            $wixBin = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*" -Directory -ErrorAction SilentlyContinue |
-              ForEach-Object { Join-Path $_.FullName "bin" } |
-              Where-Object { Test-Path (Join-Path $_ "candle.exe") } |
-              Select-Object -First 1
-            if ($wixBin) { Add-Content $env:GITHUB_PATH $wixBin }
+          if (-not $wixBin) {
+            $wixBin = (Get-ChildItem 'C:\Program Files (x86)' -Filter candle.exe -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match 'WiX Toolset' } |
+              Select-Object -First 1 |
+              ForEach-Object { $_.DirectoryName })
           }
-          where.exe candle.exe
-          where.exe light.exe
+          if (-not $wixBin -or -not (Test-Path (Join-Path $wixBin 'light.exe'))) {
+            throw 'WiX candle.exe and light.exe were not found.'
+          }
+          # GITHUB_PATH affects later steps only; update this process too so
+          # validation and the build script see the tools immediately.
+          $env:PATH = "$wixBin;$env:PATH"
+          $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Get-Command candle.exe
+          Get-Command light.exe
       - name: Build MSI
         shell: powershell
-        run: .\deploy\windows\build_msi.ps1 -Version 0.2.0
+        run: .\deploy\windows\build_msi.ps1 -Version 0.2.0 -OneFile
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:

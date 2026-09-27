@@ -20,12 +20,12 @@ This guide shows how to build `JARVIS-0.1.0-x64.msi`.
 1. **Windows 10/11 64-bit**
 2. **Python 3.11** from https://www.python.org/downloads/
    - During install, check **Add python.exe to PATH**
-3. **WiX Toolset v3.11** from https://wixtoolset.org/releases/
-   - Download `wix311.exe` and install
+3. **Node.js 20+** from https://nodejs.org/ (the build embeds the frontend HUD)
+   - Verify: `node --version` and `npm --version`
+4. **WiX Toolset v3.11 or v3.14** from https://wixtoolset.org/releases/
    - Or via Chocolatey: `choco install wixtoolset`
-   - Or winget: `winget install WiXToolset.WiXToolset`
    - Verify: open new PowerShell, `candle.exe -?` should show help
-4. **Git** (optional): https://git-scm.com/download/win
+5. **Git** (optional): https://git-scm.com/download/win
 
 ### Build Steps
 
@@ -38,17 +38,17 @@ cd JARVIS
 .\deploy\windows\build_msi.ps1 -Version 0.1.0
 
 # Output:
-# dist/jarvis/jarvis.exe (folder with dependencies)
+# dist/jarvis.exe (one-file executable with dependencies bundled)
 # dist/JARVIS-0.1.0-x64.msi (installer)
-# dist/JARVIS-0.1.0-portable.zip (portable)
+# dist/JARVIS-0.1.0-portable.zip (portable one-file executable)
 ```
 
 **What the script does:**
-1. Checks Python, WiX, PyInstaller
-2. Installs deps: `pip install -e .[all]`
-3. Builds EXE via PyInstaller (`--onedir` for faster startup)
-4. Builds MSI via WiX `candle.exe` + `light.exe`
-5. Creates portable ZIP
+1. Checks Python and WiX, then installs PyInstaller and voice/runtime dependencies
+2. Builds the frontend HUD with `npm ci` and `npm run build`
+3. Builds a one-file EXE via PyInstaller so the MSI cannot omit a dependency DLL or package module
+4. Builds the MSI from the checked-in `deploy/windows/jarvis.wxs` via WiX `candle.exe` + `light.exe`
+5. Creates a portable ZIP
 
 ### Install the MSI
 
@@ -65,11 +65,11 @@ jarvis ask "hello" --mock
 ```
 
 **What MSI installs:**
-- `C:\Program Files\JARVIS\jarvis.exe` + dependencies
-- `C:\Program Files\JARVIS\configs\`
-- PATH entry: `C:\Program Files\JARVIS\`
-- Start Menu: `JARVIS` + `Uninstall JARVIS`
-- Registry: `HKCU\Software\JARVIS`
+- `C:\Program Files\JARVIS SHILATECH\jarvis.exe` (one-file executable)
+- `C:\Program Files\JARVIS SHILATECH\config.example.toml`
+- PATH entry: `C:\Program Files\JARVIS SHILATECH\`
+- Start Menu: JARVIS, JARVIS Chat, and Uninstall JARVIS
+- Registry: `HKLM\Software\SHILATECH\JARVIS`
 
 ### Uninstall
 
@@ -179,7 +179,8 @@ pip install faiss-cpu --no-cache-dir
 - Or sign EXE with code signing cert (for production)
 
 **MSI build fails: `light.exe` error:**
-- Ensure `dist/jarvis/jarvis.exe` exists first (PyInstaller must succeed)
+- Ensure `dist/jarvis.exe` exists first (PyInstaller must succeed)
+- Check that `frontend/dist/index.html` exists and WiX can resolve the installer assets
 - Check `deploy/windows/jarvis.wxs` paths are correct
 
 **Can't build MSI on Linux/macOS:**

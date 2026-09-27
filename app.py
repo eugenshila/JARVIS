@@ -450,26 +450,15 @@ class CircularHUDApp(tk.Tk):
             self.canvas.create_text(70, 60, text="99% - Strength", fill="#22d3ee", font=("JetBrains Mono", 8, "bold"), anchor="w")
             self.canvas.create_text(70, 75, text="Home WiFi - Source", fill="#64748b", font=("JetBrains Mono", 7), anchor="w")
             self.canvas.create_text(70, 95, text="Jarvis list", fill="#475569", font=("JetBrains Mono", 7), anchor="w")
-            self.canvas.create_text(70, 110, text="• backup themes
-• backup control
-• warning control
-• system diagnostics
-• network status", fill="#334155", font=("JetBrains Mono", 6), justify="left", anchor="w")
-            self.canvas.create_text(70, 170, text="SYSTEM • ONLINE
-Engine: OLLAMA
-Mode: FULL STACK
-Latency: 33ms
-SHILATECH SECURE", fill="#0e7490", font=("JetBrains Mono", 6), justify="left", anchor="w")
+            self.canvas.create_text(70, 110, text="• backup themes\n• backup control\n• warning control\n• system diagnostics\n• network status", fill="#334155", font=("JetBrains Mono", 6), justify="left", anchor="w")
+            self.canvas.create_text(70, 170, text="SYSTEM • ONLINE\nEngine: OLLAMA\nMode: FULL STACK\nLatency: 33ms\nSHILATECH SECURE", fill="#0e7490", font=("JetBrains Mono", 6), justify="left", anchor="w")
 
             # Right side - weather like screenshot more modern
             self.canvas.create_text(self.canvas_size-70, 60, text="WEATHER • NAIROBI", fill="#0e7490", font=("JetBrains Mono", 7), anchor="e")
             self.canvas.create_text(self.canvas_size-70, 80, text="56°F", fill="#7dd3fc", font=("JetBrains Mono", 16, "bold"), anchor="e")
             self.canvas.create_text(self.canvas_size-70, 95, text="Partly Cloudy", fill="#cbd5e1", font=("JetBrains Mono", 8), anchor="e")
             self.canvas.create_text(self.canvas_size-70, 108, text="High 74° • Low 60°", fill="#64748b", font=("JetBrains Mono", 7), anchor="e")
-            self.canvas.create_text(self.canvas_size-70, 125, text="Precipitation: 10%
-Humidity: 65%
-Wind: 5 mph
-SHILATECH", fill="#475569", font=("JetBrains Mono", 6), justify="right", anchor="e")
+            self.canvas.create_text(self.canvas_size-70, 125, text="Precipitation: 10%\nHumidity: 65%\nWind: 5 mph\nSHILATECH", fill="#475569", font=("JetBrains Mono", 6), justify="right", anchor="e")
 
             # Bottom extra data like screenshot
             self.canvas.create_text(cx, self.canvas_size-20, text="Trash - 44 items • Size - 248.95 MB • Source - AC Line • Power - 90% • ONLINE SECURE • ENCRYPTED • 33ms • SHILATECH", fill="#334155", font=("JetBrains Mono", 7))
