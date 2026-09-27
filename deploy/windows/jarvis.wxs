@@ -1,96 +1,100 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <!-- JARVIS SHILATECH MSI Installer — WiX Toolset v3.11 — Fixes disappearing with onefile -->
-  <!-- Build: .\build_msi.ps1 -Version 0.1.9.3 -OneFile  (onefile single exe contains all deps, no missing DLLs) -->
-
-  <Product Id="*" 
-           Name="JARVIS - SHILATECH - Personal AI, On Personal Devices" 
-           Language="1033" 
-           Version="0.0.0" 
-           Manufacturer="SHILATECH" 
+  <!-- JARVIS SHILATECH MSI installer, WiX Toolset v3.11+. -->
+  <!-- ProductVersion is supplied by candle with -dProductVersion=x.y.z. -->
+  <Product Id="*"
+           Name="JARVIS - SHILATECH - Personal AI, On Personal Devices"
+           Language="1033"
+           Version="$(var.ProductVersion)"
+           Manufacturer="SHILATECH"
            UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
 
-    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="JARVIS SHILATECH — Local-first Personal AI — Voice speaks online/offline — Fixes disappearing" Comments="Apache 2.0 License SHILATECH" />
-
+    <Package InstallerVersion="200"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="JARVIS SHILATECH — Local-first Personal AI"
+             Comments="Apache 2.0 License SHILATECH" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
-      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="ConfigExample" />
       <ComponentRef Id="PathEnv" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
-    <!-- UI -->
     <UIRef Id="WixUI_InstallDir" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="deploy/windows/license.rtf" />
     <WixVariable Id="WixUIBannerBmp" Value="deploy/windows/banner.bmp" />
     <WixVariable Id="WixUIDialogBmp" Value="deploy/windows/dialog.bmp" />
 
-    <!-- Directories -->
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH">
-          <!-- For onefile: single exe contains all deps, fixes disappearing -->
-          <!-- For onedir: use heat.exe dir dist/jarvis -cg ProductComponents -dr INSTALLFOLDER -gg -srd -out deploy/windows/files.wxs -->
-          <Directory Id="BIN" Name="bin" />
-        </Directory>
+        <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH"/>
+        <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH" />
       </Directory>
     </Directory>
 
-    <!-- Components - OneFile mode: single exe, no disappearing -->
+    <!-- The MSI contains the one-file executable produced by PyInstaller. -->
     <DirectoryRef Id="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="*">
-        <File Id="JarvisExe" Source="dist/jarvis.exe" KeyPath="yes" />
+        <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
       </Component>
       <Component Id="ConfigExample" Guid="*">
-        <File Id="ConfigToml" Source="configs/jarvis/config.example.toml" />
+        <File Id="ConfigToml" Source="configs\jarvis\config.example.toml" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 
     <DirectoryRef Id="ApplicationProgramsFolder">
       <Component Id="StartMenuShortcut" Guid="*">
-        <Shortcut Id="ApplicationStartMenuShortcut" 
+        <Shortcut Id="ApplicationStartMenuShortcut"
                   Name="JARVIS SHILATECH"
-                  Description="Personal AI, Voice speaks online/offline, Good Morning Eugene"
+                  Description="Personal AI, voice works online and offline"
                   Target="[INSTALLFOLDER]jarvis.exe"
-                  WorkingDirectory="INSTALLFOLDER"/>
-        <Shortcut Id="ApplicationChatShortcut" 
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="ApplicationChatShortcut"
                   Name="JARVIS Chat SHILATECH"
-                  Description="Interactive chat Good Morning Eugene"
+                  Description="Interactive JARVIS chat"
                   Target="[INSTALLFOLDER]jarvis.exe"
                   Arguments="chat --interactive"
-                  WorkingDirectory="INSTALLFOLDER"/>
-        <Shortcut Id="UninstallProduct" 
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="UninstallProduct"
                   Name="Uninstall JARVIS SHILATECH"
                   Description="Uninstall JARVIS SHILATECH"
                   Target="[System64Folder]msiexec.exe"
-                  Arguments="/x [ProductCode]"/>
-        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
-        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                  Arguments="/x [ProductCode]" />
+        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\SHILATECH\JARVIS"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
       </Component>
     </DirectoryRef>
 
-    <!-- Environment PATH -->
+    <!-- Put the install directory on the machine PATH and use HKLM as the
+         component key path because this is a per-machine package. -->
     <DirectoryRef Id="TARGETDIR">
       <Component Id="PathEnv" Guid="*">
-        <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
-        <RegistryValue Root="HKCU" Key="Software\JARVIS" Name="path" Type="integer" Value="1" KeyPath="yes"/>
+        <Environment Id="PATH"
+                     Name="PATH"
+                     Value="[INSTALLFOLDER]"
+                     Permanent="no"
+                     Part="last"
+                     Action="set"
+                     System="yes" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\SHILATECH\JARVIS"
+                       Name="path"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
       </Component>
     </DirectoryRef>
-
-    <!-- For onedir mode, harvest with heat.exe -->
-    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <!-- 
-        For onedir: heat dir dist/jarvis -cg ProductComponents -dr INSTALLFOLDER -gg -srd -out deploy/windows/files.wxs
-        Then include files.wxs in build.
-        For onefile: this group can be empty, single exe contains all.
-      -->
-    </ComponentGroup>
-
   </Product>
 </Wix>

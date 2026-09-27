@@ -158,7 +158,7 @@ cd JARVIS
 .\deploy\windows\build_msi.ps1 -Version 0.1.0
 
 # Output:
-# dist/jarvis/jarvis.exe (onedir)
+# dist/jarvis.exe (one-file)
 # dist/JARVIS-0.1.0-x64.msi (if WiX found)
 # dist/JARVIS-0.1.0-portable.zip
 

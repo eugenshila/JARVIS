@@ -9,14 +9,18 @@ This folder contains everything to build a Windows installer for JARVIS.
    - ✅ Check **"Add python.exe to PATH"** during install
    - Verify: `python --version`
 
-2. **WiX Toolset v3.11** (for MSI, optional for EXE-only)
+2. **Node.js 20+** (used to build the embedded HUD)
+   - Download: https://nodejs.org/
+   - Verify: `node --version` and `npm --version`
+
+3. **WiX Toolset v3.11 or v3.14** (for MSI, optional for EXE-only)
    - Download: https://wixtoolset.org/releases/
    - Or via Chocolatey: `choco install wixtoolset`
    - Or via winget: `winget install WiXToolset.WiXToolset`
    - Verify: `candle.exe -?` should work after adding to PATH
    - Default path: `C:\Program Files (x86)\WiX Toolset v3.11\bin\`
 
-3. **Git** (optional, for cloning)
+4. **Git** (optional, for cloning)
    - https://git-scm.com/download/win
 
 4. **Visual C++ Build Tools** (only if you want FAISS/vLLM from source)
@@ -32,8 +36,8 @@ This folder contains everything to build a Windows installer for JARVIS.
 git clone https://github.com/eugenshila/JARVIS
 cd JARVIS
 
-# Build (creates dist/JARVIS-0.1.0-x64.msi and dist/jarvis/jarvis.exe)
-.\deploy\windows\build_msi.ps1 -Version 0.1.0
+# Build (creates dist/JARVIS-0.1.0-x64.msi and dist/jarvis.exe)
+.\deploy\windows\build_msi.ps1 -Version 0.1.0 -OneFile
 
 # Or build single-file EXE
 .\deploy\windows\build_msi.ps1 -Version 0.1.0 -OneFile
@@ -66,9 +70,9 @@ jarvis ask "hello" --mock
 
 ## Output
 
-- `dist/jarvis/jarvis.exe` — main executable + dependencies folder
+- `dist/jarvis.exe` — one-file main executable (all dependencies bundled)
 - `dist/JARVIS-0.1.0-x64.msi` — Windows installer (if WiX installed)
-- `dist/JARVIS-0.1.0-portable.zip` — portable ZIP
+- `dist/JARVIS-0.1.0-portable.zip` — portable ZIP containing the executable
 
 ## Installing the MSI
 
