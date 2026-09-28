@@ -71,7 +71,7 @@
     <DirectoryRef Id="TARGETDIR">
       <Component Id="AutoStart" Guid="*">
         <RegistryValue Root="HKLM"
-                       Key="Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
                        Name="JARVIS SHILATECH"
                        Type="string"
                        Value="&quot;[INSTALLFOLDER]jarvis.exe&quot;"
