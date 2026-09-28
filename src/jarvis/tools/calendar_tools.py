@@ -59,10 +59,29 @@ class CalendarToolEnhanced(BaseTool):
 
         else:  # today
             today_str = datetime.now().date().isoformat()
+
+            # Prefer real Google Calendar when the user has completed OAuth.
+            try:
+                from jarvis.connectors.google import GoogleConnector
+                google = GoogleConnector()
+                if google.is_authenticated():
+                    google_events = google._get_google_calendar_today()
+                    if google_events:
+                        out = [f"**Today's Schedule — Google Calendar — {len(google_events)} events:**", ""]
+                        for ev in google_events:
+                            detail = f"  • {ev.get('time','')} — {ev.get('title','')}"
+                            if ev.get("location"):
+                                detail += f" @ {ev.get('location')}"
+                            out.append(detail)
+                        out.extend(["", "Read-only connection active. I will ask before creating or changing calendar events, Sir."])
+                        return "\n".join(out)
+            except Exception as e:
+                print(f"Google Calendar connector failed: {e}, using local/mock")
+
             today_events = [e for e in events if e.get("date") == today_str]
             
             if not today_events:
-                # Check if Google Calendar configured
+                # Check if legacy env-based Google Calendar configured
                 if os.environ.get("GOOGLE_CALENDAR_ID"):
                     return self._get_google_calendar()
                 

@@ -37,8 +37,23 @@ class EmailEnhancedTool(BaseTool):
             except:
                 emails = []
 
+        gmail_active = False
+        # Prefer real Gmail when OAuth has been completed. Read-only by design.
+        if action in ("unread", "important", "tasks", "list"):
+            try:
+                from jarvis.connectors.google import GoogleConnector
+                google = GoogleConnector()
+                if google.is_authenticated():
+                    gmail_active = True
+                    emails = google._get_gmail_unread()
+            except Exception as e:
+                print(f"Gmail connector failed: {e}, using local/mock")
+                gmail_active = False
+
         if action == "tasks":
             # Extract tasks from emails
+            if not emails and gmail_active:
+                return "**Tasks from Emails — Gmail:** No unread task-like emails found, Sir. Read-only connection active."
             if not emails:
                 return """**Tasks from Emails — Mock:**
 
@@ -65,6 +80,8 @@ ADHD Tip: 2-min rule — if reply <2 min, do now, Sir.
             return "No task emails found, Sir."
 
         elif action == "important":
+            if not emails and gmail_active:
+                return "**Important Emails — Gmail:** No unread/important emails found, Sir. Read-only connection active."
             if not emails:
                 return """**Important Emails — Mock:**
 
@@ -85,6 +102,8 @@ To get real:
             return "No important emails, Sir."
 
         elif action == "list":
+            if not emails and gmail_active:
+                return "No unread Gmail messages, Sir. Read-only connection active."
             if not emails:
                 return "No emails, Sir. Mock: 3 unread — Project update, Meeting invite, Newsletter"
             out = ["**Emails:**"]
@@ -94,10 +113,14 @@ To get real:
 
         else:  # unread
             unread = [e for e in emails if e.get("unread")]
-            unread_count = len(unread) if emails else 3  # Mock 3
+            unread_count = len(unread) if (emails or gmail_active) else 3  # Mock 3
             
+            if gmail_active and not emails:
+                return "**Email — Gmail:** 0 unread messages. Read-only connection active, Sir."
+
             if emails:
-                return f"""**Email — {unread_count} unread:**
+                source = "Gmail" if gmail_active else "local"
+                return f"""**Email — {unread_count} unread ({source}):**
 
 {self.run(action='important')}
 

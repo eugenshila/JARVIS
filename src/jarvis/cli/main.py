@@ -890,6 +890,195 @@ def weather(location: str):
         console.print("[red]Weather tool not available[/]")
 
 
+@cli.command(name="adhd-state")
+@click.option("--energy", default=5, type=int, help="Energy 1-10")
+@click.option("--focus", default=5, type=int, help="Focus 1-10")
+@click.option("--stress", default=5, type=int, help="Stress/overwhelm 1-10")
+@click.option("--sleep-hours", default=7.0, type=float, help="Last night's sleep hours")
+@click.option("--mood", default="", help="Mood words, e.g. calm/anxious/buzzing")
+@click.option("--medication", default="unknown", type=click.Choice(["unknown", "not_applicable", "taken", "skipped"]), help="Optional medication state")
+@click.option("--notes", default="", help="Optional note")
+@click.option("--status", "show_status", is_flag=True, help="Show recent support-state history")
+def adhd_state_cmd(energy: int, focus: int, stress: int, sleep_hours: float, mood: str, medication: str, notes: str, show_status: bool):
+    """Daily ADHD support-state check — not a medical diagnosis."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("adhd_state")
+    if not tool:
+        console.print("[red]ADHD state tool not available[/]")
+        return
+    if show_status:
+        console.print(Panel(Markdown(tool.run(action="status")), title="ADHD Support-State", border_style="magenta"))
+    else:
+        console.print(Panel(Markdown(tool.run(
+            action="assess",
+            energy=energy,
+            focus=focus,
+            stress=stress,
+            sleep_hours=sleep_hours,
+            mood=mood,
+            medication=medication,
+            notes=notes,
+        )), title="ADHD Support-State", border_style="magenta"))
+
+
+@cli.group()
+def connect():
+    """Connect calendar/email providers and show connection status."""
+    pass
+
+
+@connect.command(name="status")
+def connect_status():
+    """Show calendar/email connection status."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("connections")
+    if tool:
+        console.print(Panel(Markdown(tool.run(action="status")), title="Connections", border_style="cyan"))
+    else:
+        console.print("[red]Connections tool not available[/]")
+
+
+@connect.command(name="google")
+@click.option("--setup", is_flag=True, help="Run OAuth setup in browser")
+@click.option("--instructions", is_flag=True, help="Show setup instructions")
+def connect_google(setup: bool, instructions: bool):
+    """Connect Google Calendar and Gmail read-only."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("connections")
+    if not tool:
+        console.print("[red]Connections tool not available[/]")
+        return
+    action = "google_setup" if setup else "google_instructions" if instructions else "status"
+    console.print(Panel(Markdown(tool.run(action=action)), title="Google Calendar/Gmail", border_style="green"))
+
+
+@connect.command(name="microsoft")
+@click.option("--instructions", is_flag=True, help="Show Microsoft Graph setup guidance")
+def connect_microsoft(instructions: bool):
+    """Show Outlook/Office 365 setup guidance."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("connections")
+    if tool:
+        console.print(Panel(Markdown(tool.run(action="microsoft_instructions")), title="Microsoft Outlook/365", border_style="blue"))
+    else:
+        console.print("[red]Connections tool not available[/]")
+
+
+@connect.command(name="local")
+def connect_local():
+    """Show local calendar/email JSON fallback paths."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("connections")
+    if tool:
+        console.print(Panel(Markdown(tool.run(action="local_paths")), title="Local Calendar/Email", border_style="yellow"))
+    else:
+        console.print("[red]Connections tool not available[/]")
+
+
+@cli.command(name="apps")
+@click.option("--list", "list_apps", is_flag=True, help="List approved apps")
+@click.option("--discover", is_flag=True, help="Discover common installed apps and save allow-list")
+@click.option("--add", "add_app", is_flag=True, help="Add/update an allowed app")
+@click.option("--remove", default="", help="Remove an app from the allow-list")
+@click.option("--launch", default="", help="Launch an approved app")
+@click.option("--name", default="", help="Friendly app name when adding")
+@click.option("--path", "app_path", default="", help="Installed app executable path when adding")
+@click.option("--yes", is_flag=True, help="Confirm launch")
+@click.option("--allow-args", is_flag=True, help="Allow this app to receive command-line args")
+def apps_cmd(list_apps: bool, discover: bool, add_app: bool, remove: str, launch: str, name: str, app_path: str, yes: bool, allow_args: bool):
+    """Safe installed software launcher using a local allow-list."""
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("app_launcher")
+    if not tool:
+        console.print("[red]App launcher tool not available[/]")
+        return
+    if discover:
+        result = tool.run(action="discover")
+    elif add_app:
+        result = tool.run(action="add", name=name, path=app_path, allow_args=allow_args)
+    elif remove:
+        result = tool.run(action="remove", app=remove)
+    elif launch:
+        result = tool.run(action="launch", app=launch, confirm=yes)
+    elif list_apps:
+        result = tool.run(action="list")
+    else:
+        result = tool.run(action="instructions")
+    console.print(Panel(Markdown(result), title="Safe App Launcher", border_style="cyan"))
+
+
+@cli.group()
+def career():
+    """Career OS powered by JAUTOMATIC JOB SEARCH."""
+    pass
+
+
+def _career_tool_result(action: str, **kwargs):
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool("career_os")
+    if not tool:
+        console.print("[red]Career OS tool not available[/]")
+        return
+    console.print(Panel(Markdown(tool.run(action=action, **kwargs)), title="Career OS", border_style="cyan"))
+
+
+@career.command(name="status")
+def career_status():
+    """Show JAUTOMATIC pipeline and career mode status."""
+    _career_tool_result("status")
+
+
+@career.command(name="today")
+def career_today():
+    """Create today's 3-task job/training/employed-mode schedule."""
+    _career_tool_result("today")
+
+
+@career.command(name="mode")
+@click.option("--set", "set_mode", type=click.Choice(["seeking", "employed", "open_to_better", "paused"]), required=True, help="Career mode")
+def career_mode(set_mode: str):
+    """Set career mode: seeking, employed, open_to_better, paused."""
+    _career_tool_result("mode", mode=set_mode)
+
+
+@career.command(name="followups")
+def career_followups():
+    """Show JAUTOMATIC follow-ups due."""
+    _career_tool_result("followups")
+
+
+@career.command(name="training")
+def career_training():
+    """Show training progress and free learning guidance."""
+    _career_tool_result("training")
+
+
+@career.command(name="open")
+@click.option("--yes", is_flag=True, help="Confirm opening JAUTOMATIC")
+def career_open(yes: bool):
+    """Open JAUTOMATIC JOB SEARCH if installed or available as source."""
+    _career_tool_result("open", confirm=yes)
+
+
+@career.command(name="paths")
+def career_paths():
+    """Show JAUTOMATIC workspace/app paths."""
+    _career_tool_result("paths")
+
+
+@career.command(name="postgres")
+def career_postgres():
+    """Explain whether PostgreSQL is required."""
+    _career_tool_result("postgres")
+
+
 # Business OS group
 try:
     from jarvis.cli.business import business as business_group

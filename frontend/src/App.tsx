@@ -28,7 +28,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [health, setHealth] = useState<any>(null)
   const [context, setContext] = useState('')
-  const [mode, setMode] = useState<'chat' | 'ironman' | 'hud' | 'adhd' | 'bodydouble' | 'arc' | 'circular'>('hud')
+  const [mode, setMode] = useState<'chat' | 'ironman' | 'hud' | 'adhd' | 'bodydouble' | 'arc' | 'circular'>('circular')
 
   useEffect(() => {
     fetch('/health').then(r=>r.json()).then(setHealth).catch(()=>{})

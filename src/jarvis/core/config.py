@@ -12,7 +12,47 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore
 
-import tomlkit
+try:
+    import tomlkit
+except ModuleNotFoundError:  # pragma: no cover - fallback for minimal/offline installs
+    class _SimpleTomlTable(dict):
+        def add(self, *_args, **_kwargs) -> None:
+            return None
+
+    class _SimpleTomlKit:
+        @staticmethod
+        def document() -> _SimpleTomlTable:
+            return _SimpleTomlTable()
+
+        @staticmethod
+        def table() -> _SimpleTomlTable:
+            return _SimpleTomlTable()
+
+        @staticmethod
+        def comment(_text: str) -> None:
+            return None
+
+        @staticmethod
+        def dumps(doc: dict) -> str:
+            def fmt(value):
+                if isinstance(value, bool):
+                    return "true" if value else "false"
+                if isinstance(value, (int, float)):
+                    return str(value)
+                return '"' + str(value).replace('"', '\\"') + '"'
+
+            lines: list[str] = []
+            for key, value in doc.items():
+                if isinstance(value, dict):
+                    lines.append(f"[{key}]")
+                    for sub_key, sub_value in value.items():
+                        lines.append(f"{sub_key} = {fmt(sub_value)}")
+                    lines.append("")
+                else:
+                    lines.append(f"{key} = {fmt(value)}")
+            return "\n".join(lines)
+
+    tomlkit = _SimpleTomlKit()  # type: ignore
 
 from jarvis.core.types import EngineConfig, EngineType
 
@@ -68,7 +108,7 @@ PRESETS: dict[str, AgentPreset] = {
         name="business-os",
         description="Business OS — Knows goals, priorities, workflows, rules, standards, persistent memory, OpenAI brain, SHILATECH COO",
         system_prompt="You are JARVIS Business OS — COO for Eugene at SHILATECH. You know goals, priorities, business, workflows, rules, standards from persistent memory. Use OpenAI gpt-4o-mini for best quality. Be proactive, enforce SHILATECH standards, align to north star, remember everything via vector memory.",
-        tools=["memory_search", "memory_write", "file_read", "file_write", "shell", "web_search", "tavily_search", "ddgs_search", "business_profile", "business_goals", "business_priorities", "business_workflows", "business_rules", "business_memory", "task_breakdown", "day_planner", "focus", "quick_capture", "win_tracker", "calendar", "weather", "proactive_briefing", "network_status", "hybrid_mode"],
+        tools=["memory_search", "memory_write", "file_read", "file_write", "shell", "web_search", "tavily_search", "ddgs_search", "business_profile", "business_goals", "business_priorities", "business_workflows", "business_rules", "business_memory", "task_breakdown", "day_planner", "focus", "quick_capture", "win_tracker", "adhd_state", "calendar", "calendar_enhanced", "email_enhanced", "connections", "career_os", "app_launcher", "weather", "proactive_briefing", "network_status", "hybrid_mode"],
     ),
     "shilatech": AgentPreset(
         name="shilatech",

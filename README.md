@@ -49,12 +49,14 @@ if the badge shows **OLLAMA OFFLINE**, start the Ollama app. The browser microph
 and spoken reply buttons depend on browser support and microphone permission.
 
 The HUD is a visual assistant with local conversation, voice controls, clap
-activation, and a small priority list. The clap opens the HUD; to dictate a
-question, press its microphone button. Browser speech recognition may depend
-on the browser's service, while Ollama chat stays local. Its chat does not yet
-operate devices, email, calendar, or desktop files, and it does not claim to
-have done those actions. The circular
-reactor is an interface graphic, not a live battery or machine diagnostic.
+activation, a small priority list, pre-MSI readiness checks, and safe local
+connectors. The clap opens the HUD; to dictate a question, press its microphone
+button. Browser speech recognition may depend on the browser's service, while
+Ollama chat stays local. Calendar/email access is read-only by default and
+requires a user-approved connector such as Google OAuth or local JSON files.
+Installed software can only be launched through the local app allow-list and
+requires explicit confirmation. The circular reactor is an interface graphic,
+not a live battery or machine diagnostic.
 
 A small Windows friendly desktop assistant built with Python's standard library. It can browse a local prompt library, prepare meeting briefs from details you paste, copy prompts, and ask an OpenAI compatible chat API to draft a response. The app runs without an API key in copy mode.
 
@@ -70,6 +72,24 @@ To use [Jarvis Public Prompts](https://github.com/mihaiwillberich/jarvis-public-
 
 ## Current scope
 
-This first version accepts pasted meeting details and files you choose as context. It does not automatically read your screen, calendar, email, or contacts. Add those integrations only after choosing the provider and permissions you want. It does not send email or modify calendar events.
+This version accepts pasted meeting details and files you choose as context. It does not automatically read your screen or contacts. Calendar/email integrations are opt-in and read-only first: Google Calendar/Gmail can be connected with OAuth, and local JSON fallback files are supported. It does not send email or modify calendar events without future explicit confirmation flows.
+
+Useful pre-MSI checks:
+
+```text
+jarvis adhd-state --energy 5 --focus 6 --stress 4 --sleep-hours 7 --mood calm
+jarvis connect status
+jarvis connect google --instructions
+jarvis apps --discover
+jarvis apps --list
+jarvis apps --launch Outlook --yes
+jarvis career status
+jarvis career today
+jarvis career postgres
+```
+
+The app launcher is allow-list based. JARVIS will not run arbitrary shell commands from chat; add approved installed software first.
+
+For job hunting and career growth, JARVIS integrates with `eugenshila/JAUTOMATIC-JOB-SEARCH` through `jarvis career ...`. JAUTOMATIC remains the specialist job-search engine while JARVIS turns its local SQLite/JSON workspace into daily schedules, follow-up reminders, training prompts, and employed-mode achievement tracking. PostgreSQL is not required for the personal MSI.
 
 The external prompt library is maintained separately and is MIT licensed; if you redistribute a copied set of its prompts, include its LICENSE file.
