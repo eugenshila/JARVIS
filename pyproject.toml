@@ -67,6 +67,8 @@ windows = [
     "google-auth-oauthlib>=1.2",
     "google-api-python-client>=2.140",
     "google-auth>=2.30",
+    "pyinstaller>=6.0",
+    "pywebview>=5.0,<6",
 ]
 voice = [
     "faster-whisper>=1.0",
@@ -92,7 +94,7 @@ all = [
 
 [project.scripts]
 jarvis = "jarvis.cli.main:cli"
-jarvis-desktop = "app:main"
+jarvis-desktop = "jarvis.cli.desktop_gui:main"
 jarvis-server = "jarvis.server.api:serve_cli"
 jarvis-hud-companion = "jarvis.startup.hud_companion:main"
 jarvis-windows = "jarvis.startup.windows_boot:main"

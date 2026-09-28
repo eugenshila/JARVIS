@@ -12,6 +12,7 @@
 
     <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">
       <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="DesktopExecutable" />
       <ComponentRef Id="ConfigExample" />
       <ComponentRef Id="PathEnv" />
       <ComponentRef Id="StartMenuShortcut" />
@@ -46,6 +47,9 @@
       <Component Id="MainExecutable" Guid="*">
         <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
       </Component>
+      <Component Id="DesktopExecutable" Guid="*">
+        <File Id="JarvisDesktopExe" Source="dist\jarvis-desktop.exe" KeyPath="yes" />
+      </Component>
       <Component Id="ConfigExample" Guid="*">
         <File Id="ConfigToml" Source="configs\jarvis\config.example.toml" KeyPath="yes" />
       </Component>
@@ -54,11 +58,11 @@
     <DirectoryRef Id="JARVISStartMenuFolder">
       <Component Id="StartMenuShortcut" Guid="*">
         <Shortcut Id="ApplicationStartMenuShortcut" Name="JARVIS SHILATECH"
-                  Description="Personal AI, voice works online and offline"
+                  Description="Open the native JARVIS desktop HUD"
+                  Target="[INSTALLFOLDER]jarvis-desktop.exe" WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="ApplicationBootShortcut" Name="JARVIS SHILATECH Boot + Voice"
+                  Description="Start JARVIS HUD, local API, Ollama and hands-free voice"
                   Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" />
-        <Shortcut Id="ApplicationChatShortcut" Name="JARVIS Chat SHILATECH"
-                  Description="Interactive JARVIS chat" Target="[INSTALLFOLDER]jarvis.exe"
-                  Arguments="chat --interactive" WorkingDirectory="INSTALLFOLDER" />
         <Shortcut Id="UninstallProduct" Name="Uninstall JARVIS SHILATECH"
                   Description="Uninstall JARVIS SHILATECH" Target="[System64Folder]msiexec.exe"
                   Arguments="/x [ProductCode]" />
