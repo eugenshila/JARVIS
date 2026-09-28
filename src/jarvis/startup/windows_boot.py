@@ -117,6 +117,11 @@ def main() -> None:
 
     start_ollama()
     start_api()
+    try:
+        from jarvis.startup.boot_sequence import run_boot_sequence
+        run_boot_sequence(os.environ.get("JARVIS_USER", "Eugene"))
+    except Exception as exc:
+        print(f"Boot HUD skipped: {exc}", flush=True)
     webbrowser.open(HUD_URL)
     print("JARVIS online. HUD ready at", HUD_URL, flush=True)
     companion = start_companion()
