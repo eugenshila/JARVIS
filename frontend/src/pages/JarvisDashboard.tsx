@@ -247,7 +247,7 @@ export default function JarvisDashboard() {
 
   // reactor size responsive
   useEffect(() => {
-    const fit = () => setReactor(Math.round(Math.min(560, window.innerWidth * 0.4, window.innerHeight * 0.66)))
+    const fit = () => setReactor(Math.round(Math.min(720, window.innerWidth * 0.48, window.innerHeight * 0.82)))
     fit()
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)
@@ -284,6 +284,30 @@ export default function JarvisDashboard() {
   const monthName = now.toLocaleDateString([], { month: 'long' })
   const dayNum = now.getDate()
   const tMin = Math.floor(timer / 60), tSec = String(timer % 60).padStart(2, '0')
+
+  // --- ADHD day plan: derive a time-blocked schedule + "do now" + tips ---
+  const mitText = (i: number) => mits[i]?.text || ['Deep work block', 'Second priority', 'Third priority'][i]
+  const dayPlan = [
+    { s: 9, t: '09:00', label: `Deep work · ${mitText(0)}`, tip: 'Phone away, one tab only' },
+    { s: 10.5, t: '10:30', label: 'Movement break · 5-min walk', tip: 'Dopamine hit + water' },
+    { s: 10.75, t: '10:45', label: `Focus · ${mitText(1)}`, tip: '25-min sprints, then rest' },
+    { s: 12, t: '12:00', label: 'Lunch + reset', tip: 'No screens, just breathe' },
+    { s: 13, t: '13:00', label: `Focus · ${mitText(2)}`, tip: 'Body-double on for momentum' },
+    { s: 14.5, t: '14:30', label: 'Admin · email & messages', tip: 'The 2-minute rule' },
+    { s: 16, t: '16:00', label: 'Log wins + plan tomorrow', tip: 'Celebrate small wins' },
+  ]
+  const nowFloat = now.getHours() + now.getMinutes() / 60
+  let doNow = dayPlan[0]
+  for (const b of dayPlan) if (nowFloat >= b.s) doNow = b
+  const improveTips = [
+    'Pick ONE task now — hide the rest',
+    'Start a 25-min focus sprint (body-double)',
+    'Move + hydrate before your first MIT',
+    'Overwhelmed? Brain-dump, then choose 3 MITs',
+    'Break big tasks into 10-minute steps',
+  ]
+  const tipOfNow = improveTips[now.getMinutes() % improveTips.length]
+
 
   const addTask = () => {
     const v = newTask.trim()
@@ -365,21 +389,10 @@ export default function JarvisDashboard() {
       ))}
 
       {/* ===== LEFT COLUMN: storage, energy, ADHD co-pilot ===== */}
-      <div style={{ position: 'absolute', top: '30%', left: '2%', width: 244, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 4, color: CYAN_SOFT, textShadow: `0 0 10px ${CYAN}` }}>
-          EXPO<span style={{ color: CYAN }}> 2010</span>
-        </div>
-        <Panel title="STORAGE VOLUME">
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-            <span style={{ color: CYAN }}>Total 100 GB</span><span style={{ color: CYAN_SOFT }}>Free 2 GB</span>
-          </div>
-          <div style={{ height: 6, background: CYAN_DIM, borderRadius: 3, marginTop: 8, overflow: 'hidden' }}>
-            <div style={{ width: '98%', height: '100%', background: CYAN, boxShadow: `0 0 8px ${CYAN}` }} />
-          </div>
-        </Panel>
-
-        {/* ADHD co-pilot — running inside the system */}
-        <Panel title="ADHD CO-PILOT · ACTIVE" right={<span style={{ fontSize: 8, color: UP, letterSpacing: 1 }}>● RUNNING</span>}>
+      <div style={{ position: 'absolute', top: '22%', left: '2%', width: 300, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* ADHD co-pilot — day planning, runs inside the system */}
+        <Panel title="ADHD CO-PILOT · PLAN MY DAY" right={<span style={{ fontSize: 8, color: UP, letterSpacing: 1 }}>● RUNNING</span>}>
+          {/* focus timer + do-now */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <div style={{ position: 'relative', width: 74, height: 74, flexShrink: 0 }}>
               <svg width={74} height={74} style={HALO(6)}>
@@ -394,25 +407,58 @@ export default function JarvisDashboard() {
               </div>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, marginBottom: 4 }}>TOP 3 MITs</div>
-              {mits.length ? mits.map((m, i) => (
-                <div key={i} style={{ fontSize: 10, color: CYAN, lineHeight: 1.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {i + 1}. {m.text}
-                </div>
-              )) : <div style={{ fontSize: 10, color: UP }}>All MITs cleared — nice, Sir.</div>}
+              <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1 }}>DO NOW · {doNow.t}</div>
+              <div style={{ fontSize: 11, color: CYAN, lineHeight: 1.4, marginTop: 2 }}>{doNow.label}</div>
+              <div style={{ fontSize: 9, color: UP, marginTop: 2 }}>▸ {doNow.tip}</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             <button onClick={() => setRunning(r => !r)} style={btn}>{running ? 'PAUSE' : 'START'} FOCUS</button>
             <button onClick={() => setTimer(1500)} style={btn}>RESET</button>
           </div>
-          <div style={{ fontSize: 9, color: CYAN_DIM, marginTop: 6 }}>Wins today: <span style={{ color: UP }}>{wins}</span> · Body-double ready</div>
+
+          {/* Today's plan (time blocks) */}
+          <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, margin: '10px 0 4px' }}>HOW TO PLAN YOUR DAY</div>
+          <div style={{ maxHeight: 148, overflowY: 'auto', paddingRight: 4 }}>
+            {dayPlan.map((b, i) => {
+              const active = b.t === doNow.t
+              return (
+                <div key={i} style={{ display: 'flex', gap: 8, padding: '4px 0',
+                  borderBottom: i < dayPlan.length - 1 ? `1px solid ${CYAN_DIM}` : 'none' }}>
+                  <div style={{ width: 40, fontSize: 10, color: active ? CYAN : CYAN_DIM, flexShrink: 0 }}>{b.t}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: active ? CYAN : CYAN_SOFT, textShadow: active ? `0 0 6px ${CYAN}` : 'none' }}>
+                      {active && '▸ '}{b.label}
+                    </div>
+                    <div style={{ fontSize: 8, color: CYAN_DIM }}>{b.tip}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Improve-your-day tip */}
+          <div style={{ marginTop: 8, border: `1px solid ${CYAN_DIM}`, borderRadius: 6, padding: '6px 8px', background: 'rgba(34,211,238,0.06)' }}>
+            <div style={{ fontSize: 8, color: CYAN_SOFT, letterSpacing: 1 }}>IMPROVE YOUR DAY</div>
+            <div style={{ fontSize: 10, color: CYAN, marginTop: 2 }}>💡 {tipOfNow}</div>
+          </div>
+
+          <div style={{ fontSize: 9, color: CYAN_DIM, marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+            <span>MITs left: <span style={{ color: CYAN }}>{mits.length}</span></span>
+            <span>Wins today: <span style={{ color: UP }}>{wins}</span></span>
+          </div>
         </Panel>
 
+        {/* storage + energy compact row */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Gauge size={84} value={100} label="ENERGY" sub="%" />
-          <div style={{ fontSize: 9, color: CYAN_DIM, lineHeight: 1.7 }}>
-            <div>REACTOR ONLINE</div><div>OUTPUT 3.2 GJ/s</div><div>TEMP 284 K</div><div>STABLE</div>
+          <Gauge size={78} value={100} label="ENERGY" sub="%" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 3, color: CYAN_SOFT, textShadow: `0 0 8px ${CYAN}` }}>
+              EXPO<span style={{ color: CYAN }}> 2010</span>
+            </div>
+            <div style={{ fontSize: 9, color: CYAN_DIM, lineHeight: 1.6, marginTop: 4 }}>
+              <div>Storage 98 / 100 GB</div><div>Reactor online · 284 K</div><div>Output 3.2 GJ/s · stable</div>
+            </div>
           </div>
         </div>
       </div>
