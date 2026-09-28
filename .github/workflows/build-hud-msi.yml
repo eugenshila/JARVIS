@@ -1,4 +1,4 @@
-name: Build JARVIS Ollama HUD MSI
+name: Build SHILATECH JARVIS HUD MSI
 
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[voice] pyinstaller
 
-      - name: Package local API, HUD, and clap companion
+      - name: Package local API, HUD, and hands-free companion
         shell: pwsh
         run: |
           python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice --collect-all faster_whisper --collect-all uvicorn src/jarvis/cli/hud_launcher.py
@@ -73,8 +73,8 @@ jobs:
         run: |
           candle.exe -arch x64 deploy/windows/hud.wxs -o dist/hud.wixobj
           if ($LASTEXITCODE -ne 0) { throw "WiX compile failed" }
-          light.exe dist/hud.wixobj -o dist/JARVIS-HUD-0.2.0-x64.msi
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD-0.2.0-x64.msi)) { throw "MSI link failed" }
+          light.exe dist/hud.wixobj -ext WixUIExtension -o dist/SHILATECH-JARVIS-0.3.0-x64.msi
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/SHILATECH-JARVIS-0.3.0-x64.msi)) { throw "MSI link failed" }
 
       - name: Install and smoke test MSI
         shell: pwsh
@@ -107,7 +107,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-HUD-0.2.0-Windows
+          name: SHILATECH-JARVIS-0.3.0-Windows
           path: |
             dist/JARVIS-HUD-0.2.0-x64.msi
             dist/JARVIS-HUD.exe
