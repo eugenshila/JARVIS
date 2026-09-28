@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="JARVIS HUD" Language="1033" Version="0.2.0" Manufacturer="Shilatech"
+  <Product Id="*" Name="SHILATECH JARVIS" Language="1033" Version="0.3.0" Manufacturer="Shilatech"
            UpgradeCode="5b8fa79e-5654-4c0b-ab2d-b4a10480883d">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" Platform="x64" />
-    <MajorUpgrade DowngradeErrorMessage="A newer JARVIS HUD is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer SHILATECH JARVIS is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="LocalAppDataFolder">
-        <Directory Id="INSTALLFOLDER" Name="JARVIS HUD" />
+        <Directory Id="INSTALLFOLDER" Name="SHILATECH JARVIS" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="APPLICATIONFOLDER" Name="JARVIS HUD" />
+        <Directory Id="APPLICATIONFOLDER" Name="SHILATECH JARVIS" />
       </Directory>
       <Directory Id="StartupFolder" />
     </Directory>
@@ -20,13 +20,13 @@
       <Component Id="HudExecutable" Guid="e59fc8f1-127d-4f4e-8bdf-10cb57dc47e2">
         <File Id="HudExe" Source="dist\JARVIS-HUD.exe" />
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
-        <RegistryValue Root="HKCU" Key="Software\Shilatech\JARVIS HUD" Name="Executable"
+        <RegistryValue Root="HKCU" Key="Software\SHILATECH\JARVIS" Name="Executable"
                        Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="APPLICATIONFOLDER">
       <Component Id="AppShortcutComponent" Guid="*">
-        <Shortcut Id="AppShortcut" Name="JARVIS HUD" Description="Local Qwen assistant through Ollama"
+        <Shortcut Id="AppShortcut" Name="SHILATECH JARVIS" Description="Local Qwen2.5:3B JARVIS HUD with hands-free voice"
                   Target="[INSTALLFOLDER]JARVIS-HUD.exe" WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveAppFolder" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\Shilatech\JARVIS HUD" Name="MenuShortcut"
@@ -35,7 +35,7 @@
     </DirectoryRef>
     <DirectoryRef Id="StartupFolder">
       <Component Id="StartupShortcutComponent" Guid="*">
-        <Shortcut Id="StartupShortcut" Name="JARVIS HUD" Description="Start JARVIS after sign-in"
+        <Shortcut Id="StartupShortcut" Name="SHILATECH JARVIS" Description="Start SHILATECH JARVIS after Windows sign-in"
                   Target="[INSTALLFOLDER]JARVIS-HUD.exe" WorkingDirectory="INSTALLFOLDER" />
         <RegistryValue Root="HKCU" Key="Software\Shilatech\JARVIS HUD" Name="StartupShortcut"
                        Type="integer" Value="1" KeyPath="yes" />
