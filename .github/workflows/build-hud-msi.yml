@@ -79,10 +79,10 @@ jobs:
       - name: Install and smoke test MSI
         shell: pwsh
         run: |
-          $msi = (Resolve-Path dist/JARVIS-HUD-0.2.0-x64.msi).Path
+          $msi = (Resolve-Path dist/SHILATECH-JARVIS-0.3.0-x64.msi).Path
           $result = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/i', "`"$msi`"", '/qn', '/norestart', 'MSIINSTALLPERUSER=1')
           if ($result.ExitCode -ne 0) { throw "MSI install failed: $($result.ExitCode)" }
-          $exe = Join-Path $env:LOCALAPPDATA 'JARVIS HUD\JARVIS-HUD.exe'
+          $exe = Join-Path $env:LOCALAPPDATA 'SHILATECH JARVIS\JARVIS-HUD.exe'
           if (-not (Test-Path $exe)) { throw "Installed HUD EXE missing" }
           $process = Start-Process $exe -PassThru
           try {
@@ -109,7 +109,7 @@ jobs:
         with:
           name: SHILATECH-JARVIS-0.3.0-Windows
           path: |
-            dist/JARVIS-HUD-0.2.0-x64.msi
+            dist/SHILATECH-JARVIS-0.3.0-x64.msi
             dist/JARVIS-HUD.exe
           if-no-files-found: error
 
