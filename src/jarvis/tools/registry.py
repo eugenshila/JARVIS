@@ -102,6 +102,17 @@ try:
 except ImportError:
     HAS_CAREER = False
 
+try:
+    from jarvis.tools.income_tools import (
+        IncomeOpportunitiesTool,
+        InvestmentResearchTool,
+        IncomeProjectsTool,
+        MoneyBriefingTool,
+    )
+    HAS_INCOME = True
+except ImportError:
+    HAS_INCOME = False
+
 
 REGISTRY: dict[str, type[BaseTool]] = {
     "file_read": FileReadTool,
@@ -174,6 +185,14 @@ if HAS_CONNECTIONS:
 if HAS_CAREER:
     REGISTRY["career_os"] = CareerTool
     REGISTRY["career"] = CareerTool
+
+if HAS_INCOME:
+    REGISTRY.update({
+        "income_opportunities": IncomeOpportunitiesTool,
+        "investment_research": InvestmentResearchTool,
+        "income_projects": IncomeProjectsTool,
+        "money_briefing": MoneyBriefingTool,
+    })
 
 try:
     from jarvis.tools.calendar_tools import CalendarToolEnhanced, TaskLearningTool, WeatherTool

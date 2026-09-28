@@ -84,6 +84,38 @@ def test_jautomatic_connector_reads_sqlite_without_postgres(monkeypatch, tmp_pat
     assert stats["top_matches"][0]["company"] == "Acme"
 
 
+def test_repo_candidates_include_plain_jautomatic_folder_name(monkeypatch, tmp_path):
+    """The connector must also look for a checkout folder simply named
+    ``JAUTOMATIC`` (not only ``JAUTOMATIC-JOB-SEARCH``), so a clone at
+    ``<home>/JAUTOMATIC`` is found without extra configuration."""
+    monkeypatch.delenv("JAUTOMATIC_REPO", raising=False)
+    monkeypatch.delenv("JAUTOMATIC_SOURCE", raising=False)
+    monkeypatch.delenv("JAUTOMATIC_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    from jarvis.connectors.jautomatic import _repo_candidates
+
+    names = {p.name for p in _repo_candidates()}
+    assert "JAUTOMATIC" in names
+    assert "JAUTOMATIC-JOB-SEARCH" in names
+
+
+def test_find_app_locates_plain_jautomatic_source_checkout(monkeypatch, tmp_path):
+    monkeypatch.delenv("JAUTOMATIC_APP_PATH", raising=False)
+    monkeypatch.delenv("JAUTOMATIC_REPO", raising=False)
+    monkeypatch.delenv("JAUTOMATIC_SOURCE", raising=False)
+    monkeypatch.setenv("JAUTOMATIC_HOME", str(tmp_path / "JAUTOMATIC"))
+    repo = tmp_path / "JAUTOMATIC"
+    (repo / "jautomatic").mkdir(parents=True)
+    (repo / "main.py").write_text("# entrypoint\n", encoding="utf-8")
+
+    from jarvis.connectors.jautomatic import find_app
+
+    app = find_app()
+    assert app is not None
+    assert app["kind"] == "source"
+    assert app["repo"] == str(repo)
+
+
 def test_career_tool_modes_and_today(monkeypatch, tmp_path):
     _make_workspace(tmp_path / "jautomatic")
     monkeypatch.setenv("JAUTOMATIC_DATA_DIR", str(tmp_path / "jautomatic"))

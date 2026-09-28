@@ -51,6 +51,19 @@ const mockPreflight = {
       { name: "Chrome", path: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" },
     ],
   },
+  income: {
+    disclaimer: "Informational only — not financial advice. No automated trading.",
+    opportunities: { count: 4, awaiting_review: 2, items: [
+      { id: "demo0001", title: "Automation script for local bakery", type: "gig", status: "saved" },
+      { id: "demo0002", title: "SHILATECH micro-grant: youth tech", type: "grant", status: "discovered" },
+    ] },
+    watchlist: { count: 3, items: [{ symbol: "STARK" }, { symbol: "AAPL" }, { symbol: "NVDA" }] },
+    portfolio: { count: 2, items: [
+      { symbol: "AAPL", quantity: 5, cost_basis: 210, current_price: 229.3 },
+      { symbol: "NVDA", quantity: 2, cost_basis: 150, current_price: 178.42 },
+    ] },
+    projects: { count: 2, active: 1, items: [{ id: "demo0003", name: "Freelance automation", status: "active" }] },
+  },
 };
 
 export default function IronManCircularHUD() {
@@ -81,6 +94,7 @@ export default function IronManCircularHUD() {
   const [adhdForm, setAdhdForm] = useState({ energy: 5, focus: 5, stress: 5, sleep_hours: 7, mood: "", medication: "unknown" });
   const [adhdResult, setAdhdResult] = useState("");
   const [actionStatus, setActionStatus] = useState("");
+  const [newSymbol, setNewSymbol] = useState("");
   const userName = localStorage.getItem("jarvis_user_name") || "Eugene";
 
   useEffect(() => {
@@ -517,6 +531,53 @@ export default function IronManCircularHUD() {
     }
   };
 
+  const moneyBriefing = async () => {
+    if (isPagesMock()) {
+      setActionStatus(`💵 **Money Briefing — Today**\n\nCareer (mode: ${preflight?.career?.mode || "seeking"}) — follow-ups due: ${preflight?.career?.stats?.follow_ups_due ?? 0}\nIncome opportunities — ${mockPreflight.income.opportunities.awaiting_review} awaiting review\nWatchlist — ${mockPreflight.income.watchlist.count} symbols tracked\n\nDemo data only — Informational only, not financial advice.`);
+      return;
+    }
+    setActionStatus("Building money briefing…");
+    try {
+      const res = await fetch("/hud/income/briefing");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Money briefing failed.");
+      setActionStatus(String(data.content || "No briefing returned."));
+      refreshPreflight();
+    } catch (e) {
+      setActionStatus(e instanceof Error ? e.message : "Money briefing failed.");
+    }
+  };
+
+  const addWatchlistSymbol = async () => {
+    const symbol = newSymbol.trim().toUpperCase();
+    if (!symbol) return;
+    if (isPagesMock()) {
+      setPreflight((current: any) => {
+        const base = current || mockPreflight;
+        const items = [...(base.income?.watchlist?.items || []), { symbol }];
+        return { ...base, income: { ...base.income, watchlist: { count: items.length, items } } };
+      });
+      setActionStatus(`Demo mode: added ${symbol} to the watchlist. Not financial advice.`);
+      setNewSymbol("");
+      return;
+    }
+    setActionStatus(`Adding ${symbol} to watchlist…`);
+    try {
+      const res = await fetch("/hud/income/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add", symbol }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not update watchlist.");
+      setActionStatus(String(data.content || "Watchlist updated."));
+      setNewSymbol("");
+      refreshPreflight();
+    } catch (e) {
+      setActionStatus(e instanceof Error ? e.message : "Watchlist update failed.");
+    }
+  };
+
   const addFocus = () => {
     if (newFocus.trim()) setFocusItems(items => [...items, newFocus.trim()].slice(0, 3));
     setNewFocus("");
@@ -538,6 +599,7 @@ export default function IronManCircularHUD() {
           <section className="hud-panel"><h2>ADHD SUPPORT STATE</h2><p className="text-slate-400 text-[11px] mt-2">Daily operating mode, not a medical diagnosis.</p><div className="mt-3 space-y-2 text-[11px]"><label className="block">Energy {adhdForm.energy}/10<input type="range" min="1" max="10" value={adhdForm.energy} onChange={e => setAdhdForm({...adhdForm, energy: Number(e.target.value)})} className="w-full"/></label><label className="block">Focus {adhdForm.focus}/10<input type="range" min="1" max="10" value={adhdForm.focus} onChange={e => setAdhdForm({...adhdForm, focus: Number(e.target.value)})} className="w-full"/></label><label className="block">Stress {adhdForm.stress}/10<input type="range" min="1" max="10" value={adhdForm.stress} onChange={e => setAdhdForm({...adhdForm, stress: Number(e.target.value)})} className="w-full"/></label><div className="grid grid-cols-2 gap-2"><input className="hud-input w-full" type="number" min="0" max="24" value={adhdForm.sleep_hours} onChange={e => setAdhdForm({...adhdForm, sleep_hours: Number(e.target.value)})} title="Sleep hours"/><input className="hud-input w-full" value={adhdForm.mood} onChange={e => setAdhdForm({...adhdForm, mood: e.target.value})} placeholder="Mood"/></div><select className="hud-input w-full" value={adhdForm.medication} onChange={e => setAdhdForm({...adhdForm, medication: e.target.value})}><option value="unknown">Medication: unknown</option><option value="not_applicable">Medication: not applicable</option><option value="taken">Medication: taken</option><option value="skipped">Medication: skipped</option></select><button onClick={assessAdhd} className="hud-button w-full">ASSESS SUPPORT MODE</button>{preflight?.adhd?.latest && <div className="text-cyan-300 border-t border-cyan-900/40 pt-2">Latest: {preflight.adhd.latest.icon} {preflight.adhd.latest.mode} • load {preflight.adhd.latest.support_load}/10</div>}{adhdResult && <pre className="whitespace-pre-wrap text-[10px] text-slate-300 max-h-40 overflow-y-auto border border-cyan-900/40 p-2">{adhdResult.split("\n").slice(0, 10).join("\n")}</pre>}</div></section>
           <section className="hud-panel"><h2>CONNECTIONS</h2><div className="mt-3 space-y-2 text-[11px]"><div className="flex justify-between"><span>Google Calendar/Gmail</span><span className={preflight?.connections?.google?.authenticated ? "text-emerald-400" : "text-amber-400"}>{preflight?.connections?.google?.authenticated ? "CONNECTED" : preflight?.connections?.google?.credentials ? "READY TO SIGN IN" : "SETUP NEEDED"}</span></div><div className="flex justify-between"><span>Microsoft Outlook/365</span><span className="text-slate-400">GUIDE READY</span></div><div className="flex justify-between"><span>Local fallback</span><span className="text-cyan-300">JSON</span></div><button onClick={connectGoogle} className="hud-button w-full mt-2">CONNECT GOOGLE</button></div></section>
           <section className="hud-panel"><h2>CAREER OS</h2><p className="text-slate-400 text-[11px] mt-2">Powered by JAUTOMATIC JOB SEARCH. SQLite + JSON; PostgreSQL not required.</p><div className="mt-3 space-y-2 text-[11px]"><div className="flex justify-between"><span>Mode</span><span className="text-cyan-300 uppercase">{preflight?.career?.mode || "seeking"}</span></div><div className="flex justify-between"><span>Jobs tracked</span><span className="text-cyan-300">{preflight?.career?.stats?.jobs ?? 0}</span></div><div className="flex justify-between"><span>Applications</span><span className="text-cyan-300">{preflight?.career?.stats?.applications ?? 0}</span></div><div className="flex justify-between"><span>Follow-ups due</span><span className={(preflight?.career?.stats?.follow_ups_due || 0) ? "text-amber-400" : "text-emerald-400"}>{preflight?.career?.stats?.follow_ups_due ?? 0}</span></div><div className="grid grid-cols-2 gap-2"><button onClick={careerToday} className="hud-button">TODAY</button><button onClick={openJautomatic} className="hud-button">OPEN</button></div><select className="hud-input w-full" value={preflight?.career?.mode || "seeking"} onChange={e => setCareerMode(e.target.value)}><option value="seeking">Actively seeking</option><option value="employed">Employed + growing</option><option value="open_to_better">Open to better</option><option value="paused">Paused</option></select></div></section>
+          <section className="hud-panel"><h2>INCOME OS</h2><p className="text-amber-400 text-[10px] mt-2 uppercase tracking-wide">⚠ Research &amp; tracking only — not financial advice</p><div className="mt-3 space-y-2 text-[11px]"><div className="flex justify-between"><span>Opportunities awaiting review</span><span className="text-cyan-300">{preflight?.income?.opportunities?.awaiting_review ?? 0} / {preflight?.income?.opportunities?.count ?? 0}</span></div><div className="flex justify-between"><span>Watchlist</span><span className="text-cyan-300">{preflight?.income?.watchlist?.count ?? 0} symbols</span></div><div className="flex justify-between"><span>Portfolio (user-entered)</span><span className="text-cyan-300">{preflight?.income?.portfolio?.count ?? 0} holdings</span></div><div className="flex justify-between"><span>Active income projects</span><span className="text-cyan-300">{preflight?.income?.projects?.active ?? 0}</span></div><div className="flex gap-1"><input className="hud-input min-w-0 flex-1" value={newSymbol} onChange={e => setNewSymbol(e.target.value)} onKeyDown={e => e.key === "Enter" && addWatchlistSymbol()} placeholder="Add symbol e.g. AAPL"/><button onClick={addWatchlistSymbol} className="hud-button">+</button></div><button onClick={moneyBriefing} className="hud-button w-full">MONEY BRIEFING</button><p className="text-slate-500 text-[10px] mt-1">Watchlist and portfolio are entered by you. Nothing here connects to a brokerage or places trades.</p></div></section>
           <section className="hud-panel"><h2>APP LAUNCHER</h2><p className="text-slate-400 text-[11px] mt-2">Approved software only. JARVIS will ask before launch.</p><div className="mt-3 flex flex-wrap gap-2">{preflight?.apps?.items?.length ? preflight.apps.items.slice(0, 5).map((app:any) => <button key={app.name} onClick={() => launchApp(app.name)} className="hud-button text-[10px]">{app.name}</button>) : <span className="text-slate-500 text-[11px]">No approved apps yet. Use CLI: jarvis apps --discover</span>}</div>{actionStatus && <pre className="whitespace-pre-wrap text-[10px] text-amber-300 mt-3 max-h-32 overflow-y-auto">{actionStatus}</pre>}</section>
           <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Voice is handled by the Windows desktop companion. Wake with “Jarvis” or double-clap; no microphone button is required. <span className="text-cyan-300">{voiceStatus.voice_name || "detecting voice"}</span>.</p></section>
         </aside>
@@ -545,7 +607,7 @@ export default function IronManCircularHUD() {
           <div className="text-center mb-2"><div className="text-2xl font-semibold tracking-[.25em] text-cyan-100">JARVIS</div><div className="text-[9px] tracking-[.45em] text-cyan-600 mt-1">PERSONAL LOCAL INTELLIGENCE</div></div>
           <div className="text-cyan-600 tracking-[.3em] text-[10px] mb-2">INTERACTIVE REACTOR INTERFACE</div>
           <div className="relative w-full max-w-[580px] aspect-square"><canvas ref={canvasRef} width={560} height={560} className="w-full h-full"/><div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="mt-[135px] text-[10px] tracking-[.3em] text-cyan-300/80">{busy ? "PROCESSING" : isListening ? "LISTENING" : status === "ready" ? "AWAITING COMMAND" : "LINK STANDBY"}</span></div></div>
-          <div className="w-full max-w-[720px] grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2"><section className="hud-panel"><h2>STOCK MARKET</h2><div className="grid grid-cols-2 gap-2 mt-3 text-xs"><span>S&P 500</span><span className="text-right text-slate-400">LIVE FEED</span><span>NASDAQ</span><span className="text-right text-slate-400">LIVE FEED</span><span>DOW JONES</span><span className="text-right text-slate-400">LIVE FEED</span><span>NSE KENYA</span><span className="text-right text-slate-400">LIVE FEED</span></div></section><section className="hud-panel"><h2>LATEST NEWS</h2><div className="space-y-2 mt-3 text-xs text-slate-300"><div>Local news feed ready</div><div>Global headlines ready</div><div>Technology headlines ready</div></div></section></div><div className="flex flex-wrap gap-4 justify-center text-[10px] tracking-widest text-cyan-600 mt-3"><span>USER: {userName.toUpperCase()}</span><span>MODEL: QWEN 2.5 3B</span><span>ENGINE: OLLAMA</span></div>
+          <div className="w-full max-w-[720px] grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2"><section className="hud-panel"><h2>WATCHLIST · INCOME OS</h2><p className="text-amber-400 text-[9px] mt-1 uppercase tracking-wide">⚠ Not financial advice</p><div className="mt-2 text-xs">{(preflight?.income?.watchlist?.items?.length ?? 0) > 0 ? preflight.income.watchlist.items.slice(0, 6).map((w: any, i: number) => { const holding = (preflight?.income?.portfolio?.items || []).find((h: any) => h.symbol === w.symbol); return (<div key={i} className="grid grid-cols-2 gap-2 py-1 border-b border-cyan-900/30 last:border-0"><span>{w.symbol}</span>{holding ? <span className="text-right text-cyan-300">qty {holding.quantity} @ {holding.cost_basis}</span> : <span className="text-right text-slate-500">watching</span>}</div>); }) : <p className="text-slate-500 text-[11px]">No symbols on your watchlist yet. Add one in the INCOME OS panel — data you enter, never auto-traded.</p>}</div></section><section className="hud-panel"><h2>LATEST NEWS</h2><div className="space-y-2 mt-3 text-xs text-slate-300"><div>Local news feed ready</div><div>Global headlines ready</div><div>Technology headlines ready</div></div></section></div><div className="flex flex-wrap gap-4 justify-center text-[10px] tracking-widest text-cyan-600 mt-3"><span>USER: {userName.toUpperCase()}</span><span>MODEL: QWEN 2.5 3B</span><span>ENGINE: OLLAMA</span></div>
         </main>
         <aside className="border-l border-cyan-900/40 bg-black/50 flex flex-col min-h-[500px] xl:h-[calc(100vh-60px)]">
           <div className="p-4 border-b border-cyan-900/40"><h2 className="text-cyan-400 tracking-[.2em] text-xs">COMMUNICATIONS</h2><p className="text-slate-500 text-[11px] mt-2">Conversation stays in this window while it is open. Ollama runs locally.</p></div>

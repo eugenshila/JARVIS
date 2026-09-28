@@ -1079,6 +1079,187 @@ def career_postgres():
     _career_tool_result("postgres")
 
 
+@cli.group()
+def income():
+    """Income OS — online income opportunities, investment research, project ROI. Not financial advice."""
+    pass
+
+
+def _income_tool_result(tool_name: str, panel_title: str, action: str, **kwargs):
+    from jarvis.tools.registry import get_tool
+
+    tool = get_tool(tool_name)
+    if not tool:
+        console.print(f"[red]{panel_title} tool not available[/]")
+        return
+    console.print(Panel(Markdown(tool.run(action=action, **kwargs)), title=panel_title, border_style="cyan"))
+
+
+@income.group(name="opportunities")
+def income_opportunities():
+    """Find and track online gigs, freelance work, grants, and bounties."""
+    pass
+
+
+@income_opportunities.command(name="find")
+@click.option("--query", default="", help="Search query, e.g. 'remote Python automation gigs'")
+def income_opportunities_find(query: str):
+    """Search for income opportunities (uses web_search; never auto-applies)."""
+    _income_tool_result("income_opportunities", "Income Opportunities", "find", query=query)
+
+
+@income_opportunities.command(name="list")
+def income_opportunities_list():
+    """List tracked opportunities."""
+    _income_tool_result("income_opportunities", "Income Opportunities", "list")
+
+
+@income_opportunities.command(name="add")
+@click.option("--title", required=True)
+@click.option("--url", default="")
+@click.option("--source", default="manual")
+@click.option("--type", "opp_type", type=click.Choice(["gig", "grant", "bounty", "contract"]), default="gig")
+@click.option("--est-value", default="")
+@click.option("--notes", default="")
+def income_opportunities_add(title: str, url: str, source: str, opp_type: str, est_value: str, notes: str):
+    """Manually add an opportunity to track."""
+    _income_tool_result(
+        "income_opportunities", "Income Opportunities", "add",
+        title=title, url=url, source=source, type=opp_type, est_value=est_value, notes=notes,
+    )
+
+
+@income_opportunities.command(name="status")
+@click.option("--id", "opp_id", required=True)
+@click.option("--set", "set_status", type=click.Choice(["discovered", "saved", "applied", "won", "passed"]), required=True)
+def income_opportunities_status(opp_id: str, set_status: str):
+    """Update an opportunity's status."""
+    _income_tool_result("income_opportunities", "Income Opportunities", "status", id=opp_id, set_status=set_status)
+
+
+@income_opportunities.command(name="today")
+def income_opportunities_today():
+    """Today's 1-3 income-opportunity MITs."""
+    _income_tool_result("income_opportunities", "Income Opportunities", "today")
+
+
+@income.group(name="watchlist")
+def income_watchlist():
+    """Investment watchlist — user-curated, not advice."""
+    pass
+
+
+@income_watchlist.command(name="add")
+@click.option("--symbol", required=True)
+@click.option("--note", default="")
+def income_watchlist_add(symbol: str, note: str):
+    """Add a symbol to the watchlist."""
+    _income_tool_result("investment_research", "Investment Research", "watchlist_add", symbol=symbol, note=note)
+
+
+@income_watchlist.command(name="remove")
+@click.option("--symbol", required=True)
+def income_watchlist_remove(symbol: str):
+    """Remove a symbol from the watchlist."""
+    _income_tool_result("investment_research", "Investment Research", "watchlist_remove", symbol=symbol)
+
+
+@income_watchlist.command(name="list")
+def income_watchlist_list():
+    """List the watchlist."""
+    _income_tool_result("investment_research", "Investment Research", "watchlist")
+
+
+@income.group(name="portfolio")
+def income_portfolio():
+    """User-entered portfolio holdings — never live-synced to a brokerage."""
+    pass
+
+
+@income_portfolio.command(name="set")
+@click.option("--symbol", required=True)
+@click.option("--quantity", type=float, required=True)
+@click.option("--cost-basis", type=float, required=True)
+@click.option("--current-price", type=float, default=None)
+def income_portfolio_set(symbol: str, quantity: float, cost_basis: float, current_price: float | None):
+    """Set/update a holding you enter yourself."""
+    _income_tool_result(
+        "investment_research", "Investment Research", "portfolio_set",
+        symbol=symbol, quantity=quantity, cost_basis=cost_basis, current_price=current_price,
+    )
+
+
+@income_portfolio.command(name="show")
+def income_portfolio_show():
+    """Show entered holdings."""
+    _income_tool_result("investment_research", "Investment Research", "portfolio")
+
+
+@income.command(name="research")
+@click.option("--symbol", required=True)
+def income_research(symbol: str):
+    """Save a news/research summary for a symbol. Not financial advice."""
+    _income_tool_result("investment_research", "Investment Research", "research", symbol=symbol)
+
+
+@income.command(name="notes")
+def income_research_notes():
+    """List saved research notes."""
+    _income_tool_result("investment_research", "Investment Research", "notes")
+
+
+@income.group(name="projects")
+def income_projects():
+    """Track hours/revenue/expenses/ROI for income-generating side projects."""
+    pass
+
+
+@income_projects.command(name="add")
+@click.option("--name", required=True)
+def income_projects_add(name: str):
+    """Create a new income project."""
+    _income_tool_result("income_projects", "Income Projects", "add", name=name)
+
+
+@income_projects.command(name="log")
+@click.option("--id", "proj_id", required=True)
+@click.option("--hours", type=float, default=0)
+@click.option("--revenue", type=float, default=0)
+@click.option("--expense", type=float, default=0)
+@click.option("--note", default="")
+def income_projects_log(proj_id: str, hours: float, revenue: float, expense: float, note: str):
+    """Log hours/revenue/expenses against a project."""
+    _income_tool_result(
+        "income_projects", "Income Projects", "log",
+        id=proj_id, hours=hours, revenue=revenue, expense=expense, note=note,
+    )
+
+
+@income_projects.command(name="list")
+def income_projects_list():
+    """List tracked projects."""
+    _income_tool_result("income_projects", "Income Projects", "list")
+
+
+@income_projects.command(name="report")
+def income_projects_report():
+    """Per-project hours/revenue/expenses/ROI report."""
+    _income_tool_result("income_projects", "Income Projects", "report")
+
+
+@income_projects.command(name="today")
+def income_projects_today():
+    """Suggest today's income-project focus block."""
+    _income_tool_result("income_projects", "Income Projects", "today")
+
+
+@income.command(name="briefing")
+@click.argument("when", default="today")
+def income_briefing(when: str):
+    """Daily money briefing: career + opportunities + projects + watchlist."""
+    _income_tool_result("money_briefing", "Money Briefing", "today")
+
+
 # Business OS group
 try:
     from jarvis.cli.business import business as business_group
