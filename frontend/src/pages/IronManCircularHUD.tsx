@@ -19,7 +19,12 @@ export default function IronManCircularHUD() {
   const [voiceStatus, setVoiceStatus] = useState<any>({ voice_name: "detecting voice" });
   const lastVoiceEvent = useRef(0);
   const [focusItems, setFocusItems] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("jarvis_focus") || "[]"); } catch { return []; }
+    try {
+      const raw = JSON.parse(localStorage.getItem("jarvis_focus") || "[]");
+      return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string").slice(0, 3) : [];
+    } catch {
+      return [];
+    }
   });
   const [newFocus, setNewFocus] = useState("");
   const userName = localStorage.getItem("jarvis_user_name") || "Eugene";
