@@ -33,9 +33,9 @@ JARVIS checks:
 It also tries to find the app/source from:
 
 - `JAUTOMATIC_APP_PATH`
-- `JAUTOMATIC_REPO`
+- `JAUTOMATIC_REPO` (or `JAUTOMATIC_SOURCE` / `JAUTOMATIC_HOME`)
 - common installed Windows path: `C:\\Program Files\\JAUTOMATIC\\jautomatic.exe`
-- sibling source checkout: `../JAUTOMATIC-JOB-SEARCH/main.py`
+- a sibling source checkout named either `JAUTOMATIC-JOB-SEARCH` or `JAUTOMATIC`, next to this repo, in `$HOME`, or one level above `$HOME` (e.g. `../JAUTOMATIC-JOB-SEARCH/main.py` or `../JAUTOMATIC/main.py`)
 
 ## Commands
 

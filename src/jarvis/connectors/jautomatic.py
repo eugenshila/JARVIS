@@ -34,6 +34,14 @@ def default_data_dir() -> Path:
     return Path(base).expanduser() / "jautomatic-job-search"
 
 
+
+# Folder names JAUTOMATIC's source checkout may be cloned under. The repo is
+# published as eugenshila/JAUTOMATIC-JOB-SEARCH, but many local setups (and the
+# shorthand "JAUTOMATIC" naming used elsewhere) clone/rename it to just
+# "JAUTOMATIC". Both are searched so JARVIS finds it either way.
+_REPO_FOLDER_NAMES = ("JAUTOMATIC-JOB-SEARCH", "JAUTOMATIC")
+
+
 def _repo_candidates() -> list[Path]:
     candidates: list[Path] = []
     for env_name in ("JAUTOMATIC_REPO", "JAUTOMATIC_SOURCE", "JAUTOMATIC_HOME"):
@@ -41,12 +49,10 @@ def _repo_candidates() -> list[Path]:
             candidates.append(Path(os.environ[env_name]).expanduser())
     cwd = Path.cwd()
     home = Path.home()
-    candidates.extend([
-        cwd.parent / "JAUTOMATIC-JOB-SEARCH",
-        home / "JAUTOMATIC-JOB-SEARCH",
-        home.parent / "JAUTOMATIC-JOB-SEARCH",
-        Path("/home/user/JAUTOMATIC-JOB-SEARCH"),
-    ])
+    bases = [cwd.parent, home, home.parent, Path("/home/user")]
+    for base in bases:
+        for name in _REPO_FOLDER_NAMES:
+            candidates.append(base / name)
     return candidates
 
 
