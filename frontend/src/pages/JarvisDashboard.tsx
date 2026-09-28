@@ -592,7 +592,7 @@ export default function JarvisDashboard() {
       </div>
 
       {/* ===== RIGHT COLUMN: weather, tasks, stocks ===== */}
-      <div style={{ position: 'absolute', top: '15%', right: '2%', width: 256, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ position: 'absolute', top: '15%', right: '2%', bottom: '3%', width: 256, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
         <Panel title="5-DAY FORECAST · NAIROBI">
           {FORECAST.map((f, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0',
@@ -648,10 +648,8 @@ export default function JarvisDashboard() {
             )
           })}
         </Panel>
-      </div>
 
-      {/* ===== BOTTOM-LEFT: comms sample data ===== */}
-      <div style={{ position: 'absolute', bottom: '3%', left: '2%', width: 232 }}>
+        {/* COMMS (moved from bottom-left to right column) */}
         <Panel title="COMMS · SAMPLE" right={<span style={{ fontSize: 9, color: DOWN }}>{INBOX.filter(m => m.unread).length} NEW</span>}>
           <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, marginBottom: 4 }}>CALENDAR · TODAY</div>
           {CALENDAR.map((c, i) => (
