@@ -254,7 +254,7 @@ export default function IronManCircularHUD() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 650).replace(/```[\s\S]*?```/g, " ").replace(/[*#`]/g, ""));
     utterance.rate = 1;
-    const voice = window.speechSynthesis.getVoices().find(v => /British|English UK|en-GB/i.test(v.name + " " + v.lang));
+    const voices = window.speechSynthesis.getVoices();\n    const voice = voices.find(v => /Microsoft George|^George$/i.test(v.name)) || voices.find(v => /Microsoft Ryan|^Ryan$/i.test(v.name)) || voices.find(v => /British|English UK|en-GB/i.test(v.name + " " + v.lang));
     if (voice) utterance.voice = voice;
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = utterance.onerror = () => setIsSpeaking(false);
