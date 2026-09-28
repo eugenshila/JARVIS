@@ -227,6 +227,16 @@ const INBOX = [
   { from: 'Newsletter', subj: 'Weekly digest', unread: false },
 ]
 
+// --- Career OS + Income OS sample fallback (used until the local API answers) ---
+const SAMPLE_CAREER = { mode: 'seeking', stats: { jobs: 12, applications: 7, follow_ups_due: 2 } }
+const SAMPLE_INCOME = {
+  disclaimer: 'Informational only — not financial advice. No automated trading.',
+  opportunities: { count: 4, awaiting_review: 2 },
+  watchlist: { count: 3 },
+  portfolio: { count: 2 },
+  projects: { count: 2, active: 1 },
+}
+
 export default function JarvisDashboard() {
   const [now, setNow] = useState(new Date())
   const [sys, setSys] = useState({ cpu: 74, ram: 15, swap: 49 })
@@ -254,6 +264,15 @@ export default function JarvisDashboard() {
   })
   const [newTask, setNewTask] = useState('')
   useEffect(() => { localStorage.setItem('jarvis_dashboard_tasks', JSON.stringify(tasks)) }, [tasks])
+
+  // Career OS + Income OS — read-only glance, falls back to sample data on
+  // GitHub Pages / when the local JARVIS API isn't running.
+  const [career, setCareer] = useState<any>(SAMPLE_CAREER)
+  const [income, setIncome] = useState<any>(SAMPLE_INCOME)
+  useEffect(() => {
+    fetch('/hud/career').then(r => r.ok ? r.json() : Promise.reject()).then(setCareer).catch(() => {})
+    fetch('/hud/income').then(r => r.ok ? r.json() : Promise.reject()).then(setIncome).catch(() => {})
+  }, [])
 
   // MITs for ADHD co-pilot (top 3 undone tasks)
   const mits = tasks.filter(t => !t.done).slice(0, 3)
@@ -543,6 +562,33 @@ export default function JarvisDashboard() {
             </div>
           </div>
         </div>
+
+        {/* CAREER OS + INCOME OS — glance card, reads the local JARVIS API */}
+        <Panel title="CAREER + INCOME OS" right={<span style={{ fontSize: 8, color: CYAN_SOFT, letterSpacing: 1 }}>{(career?.mode || 'seeking').toUpperCase()}</span>}>
+          <div style={{ fontSize: 9, color: '#f59e0b', letterSpacing: 0.5, marginBottom: 6 }}>⚠ Research &amp; tracking only — not financial advice</div>
+          <div style={{ fontSize: 10, color: CYAN_DIM, marginBottom: 4, letterSpacing: 1 }}>CAREER · JAUTOMATIC</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+            <span>Applications tracked</span><span style={{ color: CYAN }}>{career?.stats?.applications ?? 0}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+            <span>Follow-ups due</span>
+            <span style={{ color: (career?.stats?.follow_ups_due || 0) ? '#f59e0b' : UP }}>{career?.stats?.follow_ups_due ?? 0}</span>
+          </div>
+          <div style={{ fontSize: 10, color: CYAN_DIM, margin: '8px 0 4px', letterSpacing: 1 }}>INCOME OS</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+            <span>Opportunities awaiting review</span><span style={{ color: CYAN }}>{income?.opportunities?.awaiting_review ?? 0} / {income?.opportunities?.count ?? 0}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+            <span>Watchlist</span><span style={{ color: CYAN }}>{income?.watchlist?.count ?? 0} symbols</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+            <span>Portfolio (user-entered)</span><span style={{ color: CYAN }}>{income?.portfolio?.count ?? 0} holdings</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+            <span>Active income projects</span><span style={{ color: CYAN }}>{income?.projects?.active ?? 0}</span>
+          </div>
+          <div style={{ fontSize: 8, color: CYAN_DIM, marginTop: 6 }}>Watchlist/portfolio are entries you make — nothing here trades or connects to a brokerage.</div>
+        </Panel>
       </div>
 
       {/* ===== RIGHT COLUMN: weather, tasks, stocks ===== */}

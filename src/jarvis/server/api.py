@@ -98,6 +98,39 @@ class HudCareerModeRequest(BaseModel):
     mode: str
 
 
+class HudIncomeOpportunityRequest(BaseModel):
+    action: str = "add"  # add | status
+    title: str = ""
+    url: str = ""
+    source: str = "manual"
+    type: str = "gig"
+    est_value: str = ""
+    notes: str = ""
+    id: str = ""
+    set_status: str = ""
+
+
+class HudIncomeWatchlistRequest(BaseModel):
+    action: str = "add"  # add | remove
+    symbol: str
+    note: str = ""
+
+
+class HudIncomePortfolioRequest(BaseModel):
+    symbol: str
+    quantity: float = 0
+    cost_basis: float = 0
+    current_price: float | None = None
+
+
+class HudIncomeProjectLogRequest(BaseModel):
+    id: str
+    hours: float = 0
+    revenue: float = 0
+    expense: float = 0
+    note: str = ""
+
+
 def _ollama_request(path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
     request = urllib.request.Request(
@@ -184,6 +217,33 @@ def _career_summary() -> dict[str, Any]:
         return {"mode": "seeking", "stats": {}, "error": str(exc)}
 
 
+INCOME_DISCLAIMER = (
+    "Informational only — not financial advice. JARVIS is not a licensed financial "
+    "advisor. No trades are placed automatically; nothing here connects to a brokerage."
+)
+
+
+def _income_summary() -> dict[str, Any]:
+    try:
+        from jarvis.tools.income_tools import _load_list
+
+        opportunities = _load_list("opportunities.json")
+        watchlist = _load_list("watchlist.json")
+        portfolio = _load_list("portfolio.json")
+        projects = _load_list("projects.json")
+        active_opps = [o for o in opportunities if o.get("status") in {"discovered", "saved"}]
+        active_projects = [p for p in projects if p.get("status") == "active"]
+        return {
+            "disclaimer": INCOME_DISCLAIMER,
+            "opportunities": {"count": len(opportunities), "awaiting_review": len(active_opps), "items": opportunities[-10:]},
+            "watchlist": {"count": len(watchlist), "items": watchlist},
+            "portfolio": {"count": len(portfolio), "items": portfolio},
+            "projects": {"count": len(projects), "active": len(active_projects), "items": projects},
+        }
+    except Exception as exc:
+        return {"disclaimer": INCOME_DISCLAIMER, "error": str(exc)}
+
+
 @app.get("/hud/preflight")
 async def hud_preflight():
     """Pre-MSI readiness checks surfaced in the HUD."""
@@ -197,6 +257,7 @@ async def hud_preflight():
         "adhd": _adhd_latest(),
         "connections": _connection_summary(),
         "career": _career_summary(),
+        "income": _income_summary(),
         "apps": {"count": len(apps), "names": [a.get("name") for a in apps], "items": apps},
     }
 
@@ -306,6 +367,115 @@ async def hud_career_open(req: HudAppLaunchRequest):
 
         result = await asyncio.to_thread(CareerTool().run, action="open", confirm=req.confirm)
         return {"content": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# Income OS — research / planning / tracking only. GET routes are pure reads
+# of local JSON under ~/.jarvis/income/. POST routes only write to those same
+# local files — none of this ever calls a brokerage/exchange or places a trade.
+# --------------------------------------------------------------------------- #
+
+@app.get("/hud/income")
+async def hud_income():
+    return _income_summary()
+
+
+@app.get("/hud/income/opportunities")
+async def hud_income_opportunities():
+    from jarvis.tools.income_tools import _load_list
+
+    return {"disclaimer": INCOME_DISCLAIMER, "items": _load_list("opportunities.json")}
+
+
+@app.get("/hud/income/watchlist")
+async def hud_income_watchlist():
+    from jarvis.tools.income_tools import _load_list
+
+    return {"disclaimer": INCOME_DISCLAIMER, "items": _load_list("watchlist.json")}
+
+
+@app.get("/hud/income/portfolio")
+async def hud_income_portfolio():
+    from jarvis.tools.income_tools import _load_list
+
+    return {"disclaimer": INCOME_DISCLAIMER, "items": _load_list("portfolio.json")}
+
+
+@app.get("/hud/income/projects")
+async def hud_income_projects():
+    from jarvis.tools.income_tools import _load_list
+
+    return {"disclaimer": INCOME_DISCLAIMER, "items": _load_list("projects.json")}
+
+
+@app.get("/hud/income/briefing")
+async def hud_income_briefing():
+    try:
+        from jarvis.tools.income_tools import MoneyBriefingTool
+
+        result = await asyncio.to_thread(MoneyBriefingTool().run, action="today")
+        return {"content": result, "income": _income_summary()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/income/opportunities")
+async def hud_income_opportunities_write(req: HudIncomeOpportunityRequest):
+    try:
+        from jarvis.tools.income_tools import IncomeOpportunitiesTool
+
+        tool = IncomeOpportunitiesTool()
+        if req.action == "status":
+            result = await asyncio.to_thread(tool.run, action="status", id=req.id, set_status=req.set_status)
+        else:
+            result = await asyncio.to_thread(
+                tool.run, action="add", title=req.title, url=req.url, source=req.source,
+                type=req.type, est_value=req.est_value, notes=req.notes,
+            )
+        return {"content": result, "income": _income_summary()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/income/watchlist")
+async def hud_income_watchlist_write(req: HudIncomeWatchlistRequest):
+    try:
+        from jarvis.tools.income_tools import InvestmentResearchTool
+
+        tool = InvestmentResearchTool()
+        action = "watchlist_remove" if req.action == "remove" else "watchlist_add"
+        result = await asyncio.to_thread(tool.run, action=action, symbol=req.symbol, note=req.note)
+        return {"content": result, "income": _income_summary()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/income/portfolio")
+async def hud_income_portfolio_write(req: HudIncomePortfolioRequest):
+    try:
+        from jarvis.tools.income_tools import InvestmentResearchTool
+
+        result = await asyncio.to_thread(
+            InvestmentResearchTool().run, action="portfolio_set", symbol=req.symbol,
+            quantity=req.quantity, cost_basis=req.cost_basis, current_price=req.current_price,
+        )
+        return {"content": result, "income": _income_summary()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/income/projects/log")
+async def hud_income_projects_log(req: HudIncomeProjectLogRequest):
+    try:
+        from jarvis.tools.income_tools import IncomeProjectsTool
+
+        result = await asyncio.to_thread(
+            IncomeProjectsTool().run, action="log", id=req.id, hours=req.hours,
+            revenue=req.revenue, expense=req.expense, note=req.note,
+        )
+        return {"content": result, "income": _income_summary()}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
