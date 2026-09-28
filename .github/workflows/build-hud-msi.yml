@@ -37,12 +37,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[voice] pyinstaller
 
-      - name: Package local API, HUD, and hands-free companion
-        shell: pwsh
-        run: |
-          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --add-data "voice;voice" --add-data "piper;piper" --collect-all jarvis --collect-all sounddevice --collect-all faster_whisper --collect-all uvicorn src/jarvis/cli/hud_launcher.py
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD.exe)) { throw "HUD EXE build failed" }
-
       - name: Download JARVIS neural voice assets
         shell: pwsh
         run: |
@@ -56,6 +50,13 @@ jobs:
           $piperRoot = $piperExe.Directory.FullName
           Copy-Item "$piperRoot\\*" piper -Recurse -Force
           Write-Host "JARVIS neural voice and Piper runtime ready."
+
+
+      - name: Package local API, HUD, and hands-free companion
+        shell: pwsh
+        run: |
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --add-data "voice;voice" --add-data "piper;piper" --collect-all jarvis --collect-all sounddevice --collect-all faster_whisper --collect-all uvicorn src/jarvis/cli/hud_launcher.py
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD.exe)) { throw "HUD EXE build failed" }
 
       - name: Install WiX v3
         shell: pwsh
