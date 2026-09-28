@@ -3,7 +3,7 @@ name: JARVIS GitHub Pages Test
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, arena/01a0e6fe-jarvis]
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-pages.yml'
