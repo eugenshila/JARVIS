@@ -1,19 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 
 /*
-  JARVIS holographic desktop dashboard.
-  A faithful, animated recreation of the classic cyan Iron Man / JARVIS HUD:
-  central arc reactor, circular clock + gauge dials, disk / energy readouts,
-  a multi-day weather panel on the right, and an audio spectrum with media
-  controls along the bottom. Pure SVG + canvas, no backend required, so it
-  renders identically on a static GitHub Pages link.
+  JARVIS holographic desktop dashboard — single unified view.
+  Central arc reactor (large), clock + gauge dials, storage / energy readouts,
+  an ADHD co-pilot panel that runs "inside" the HUD, a live task list, a stock
+  market watchlist, a multi-day weather panel, and an audio spectrum with media
+  controls. Pure SVG + canvas, no backend required, so it renders identically on
+  a static GitHub Pages link.
 */
 
 const CYAN = '#22d3ee'
 const CYAN_SOFT = 'rgba(34,211,238,0.55)'
 const CYAN_DIM = 'rgba(34,211,238,0.25)'
+const UP = '#34d399'
+const DOWN = '#f87171'
 
-// --- small geometry helpers -------------------------------------------------
+// --- geometry helpers -------------------------------------------------------
 function polar(cx: number, cy: number, r: number, deg: number) {
   const a = ((deg - 90) * Math.PI) / 180
   return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }
@@ -24,6 +26,7 @@ function arcPath(cx: number, cy: number, r: number, start: number, end: number) 
   const large = end - start <= 180 ? 0 : 1
   return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 0 ${e.x} ${e.y}`
 }
+const HALO = (r: number) => ({ filter: `drop-shadow(0 0 ${r}px rgba(34,211,238,0.6))` })
 
 // --- tick ring --------------------------------------------------------------
 function TickRing({ cx, cy, r, count = 60, len = 6, color = CYAN_SOFT }:
@@ -40,7 +43,7 @@ function TickRing({ cx, cy, r, count = 60, len = 6, color = CYAN_SOFT }:
   return <g>{ticks}</g>
 }
 
-// --- circular gauge with a value arc ---------------------------------------
+// --- circular gauge ---------------------------------------------------------
 function Gauge({ size, value, label, sub, color = CYAN }:
   { size: number; value: number; label: string; sub?: string; color?: string }) {
   const cx = size / 2, cy = size / 2
@@ -69,7 +72,7 @@ function Gauge({ size, value, label, sub, color = CYAN }:
   )
 }
 
-// --- weather glyphs (cyan line icons) --------------------------------------
+// --- weather glyphs ---------------------------------------------------------
 function WxIcon({ kind, s = 22 }: { kind: string; s?: number }) {
   const st = { stroke: CYAN, strokeWidth: 1.4, fill: 'none' as const, strokeLinecap: 'round' as const }
   if (kind === 'sun') return (
@@ -80,7 +83,6 @@ function WxIcon({ kind, s = 22 }: { kind: string; s?: number }) {
   if (kind === 'rain') return (
     <svg width={s} height={s} viewBox="0 0 24 24"><path d="M7 14a4 4 0 0 1 .5-8 5 5 0 0 1 9.5 2 3.2 3.2 0 0 1-.5 6H7z" {...st} />
       <line x1="8" y1="18" x2="7" y2="21" {...st} /><line x1="12" y1="18" x2="11" y2="21" {...st} /><line x1="16" y1="18" x2="15" y2="21" {...st} /></svg>)
-  // cloud
   return (
     <svg width={s} height={s} viewBox="0 0 24 24"><path d="M7 17a4 4 0 0 1 .5-8 5 5 0 0 1 9.5 2 3.2 3.2 0 0 1-.5 6H7z" {...st} /></svg>)
 }
@@ -91,12 +93,21 @@ const FORECAST: Forecast[] = [
   { day: 'FRI', icon: 'sun', hi: 23, lo: 11, desc: 'Sunny' },
   { day: 'SAT', icon: 'cloud', hi: 19, lo: 12, desc: 'Cloudy' },
   { day: 'SUN', icon: 'rain', hi: 17, lo: 10, desc: 'Showers' },
-  { day: 'MON', icon: 'cloud', hi: 18, lo: 11, desc: 'Overcast' },
-  { day: 'TUE', icon: 'sun', hi: 21, lo: 12, desc: 'Sunny' },
-  { day: 'WED', icon: 'rain', hi: 14, lo: 9, desc: 'Rain' },
+  { day: 'MON', icon: 'sun', hi: 21, lo: 12, desc: 'Sunny' },
 ]
 
-const HALO = (r: number) => ({ filter: `drop-shadow(0 0 ${r}px rgba(34,211,238,0.6))` })
+// --- sparkline --------------------------------------------------------------
+function Sparkline({ data, color, w = 64, h = 22 }: { data: number[]; color: string; w?: number; h?: number }) {
+  const min = Math.min(...data), max = Math.max(...data)
+  const rng = max - min || 1
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / rng) * (h - 3) - 1.5}`).join(' ')
+  return (
+    <svg width={w} height={h} style={{ display: 'block' }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.4}
+        strokeLinejoin="round" strokeLinecap="round" style={{ filter: `drop-shadow(0 0 2px ${color})` }} />
+    </svg>
+  )
+}
 
 // --- central arc reactor ----------------------------------------------------
 function ArcReactor({ size }: { size: number }) {
@@ -112,7 +123,7 @@ function ArcReactor({ size }: { size: number }) {
       fill="rgba(34,211,238,0.18)" stroke={CYAN} strokeWidth={0.8} />)
   }
   return (
-    <svg width={size} height={size} style={{ ...HALO(18) }}>
+    <svg width={size} height={size} style={{ ...HALO(24) }}>
       <defs>
         <radialGradient id="core" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="#eafcff" />
@@ -121,34 +132,29 @@ function ArcReactor({ size }: { size: number }) {
           <stop offset="100%" stopColor="rgba(34,211,238,0)" />
         </radialGradient>
       </defs>
-      {/* outer rotating tick ring */}
       <g className="spin-slow" style={{ transformOrigin: 'center', transformBox: 'fill-box' } as any}>
-        <TickRing cx={c} cy={c} r={size * 0.47} count={72} len={10} />
+        <TickRing cx={c} cy={c} r={size * 0.47} count={72} len={12} />
       </g>
       <circle cx={c} cy={c} r={size * 0.45} fill="none" stroke={CYAN_DIM} strokeWidth={1} />
-      {/* segmented ring, counter rotating */}
       <g className="spin-rev" style={{ transformOrigin: 'center', transformBox: 'fill-box' } as any}>
         {[0, 90, 180, 270].map(a => (
           <path key={a} d={arcPath(c, c, size * 0.4, a + 8, a + 82)} fill="none"
-            stroke={CYAN} strokeWidth={3} strokeLinecap="round" style={HALO(5)} />
+            stroke={CYAN} strokeWidth={3} strokeLinecap="round" style={HALO(6)} />
         ))}
       </g>
-      {/* dashed mid ring */}
       <g className="spin-slow2" style={{ transformOrigin: 'center', transformBox: 'fill-box' } as any}>
         <circle cx={c} cy={c} r={size * 0.34} fill="none" stroke={CYAN_SOFT}
           strokeWidth={1.5} strokeDasharray="2 8" />
       </g>
-      {/* coil ring */}
       <g className="spin-fast" style={{ transformOrigin: 'center', transformBox: 'fill-box' } as any}>{coils}</g>
-      <circle cx={c} cy={c} r={size * 0.19} fill="none" stroke={CYAN} strokeWidth={2} style={HALO(6)} />
-      {/* glowing core */}
+      <circle cx={c} cy={c} r={size * 0.19} fill="none" stroke={CYAN} strokeWidth={2} style={HALO(8)} />
       <circle cx={c} cy={c} r={size * 0.16} fill="url(#core)" className="pulse-core" />
-      <circle cx={c} cy={c} r={size * 0.055} fill="#f2feff" style={HALO(14)} />
+      <circle cx={c} cy={c} r={size * 0.055} fill="#f2feff" style={HALO(16)} />
     </svg>
   )
 }
 
-// --- audio spectrum canvas --------------------------------------------------
+// --- audio spectrum ---------------------------------------------------------
 function Spectrum() {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
@@ -179,27 +185,74 @@ function Spectrum() {
     draw()
     return () => cancelAnimationFrame(raf)
   }, [])
-  return <canvas ref={ref} width={720} height={90} style={{ width: '100%', height: 90, display: 'block' }} />
+  return <canvas ref={ref} width={720} height={72} style={{ width: '100%', height: 72, display: 'block' }} />
 }
 
 // --- panel chrome -----------------------------------------------------------
-function Panel({ title, children, style }: { title?: string; children: React.ReactNode; style?: React.CSSProperties }) {
+function Panel({ title, right, children, style }:
+  { title?: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div style={{
       border: `1px solid ${CYAN_DIM}`, borderRadius: 10, padding: 12,
       background: 'rgba(6,16,22,0.55)', backdropFilter: 'blur(4px)',
       boxShadow: 'inset 0 0 24px rgba(34,211,238,0.06)', ...style,
     }}>
-      {title && <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT, marginBottom: 8 }}>{title}</div>}
+      {title && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT }}>{title}</div>
+          {right}
+        </div>
+      )}
       {children}
     </div>
   )
 }
 
+// --- stock watchlist --------------------------------------------------------
+type Stock = { sym: string; price: number; base: number; hist: number[] }
+const START_STOCKS: Stock[] = [
+  { sym: 'STARK', price: 412.55, base: 400, hist: [] },
+  { sym: 'AAPL', price: 229.30, base: 225, hist: [] },
+  { sym: 'NVDA', price: 178.42, base: 170, hist: [] },
+  { sym: 'TSLA', price: 251.10, base: 260, hist: [] },
+  { sym: 'BTC', price: 63120, base: 61000, hist: [] },
+].map(s => ({ ...s, hist: Array.from({ length: 20 }, () => s.price * (1 + (Math.random() - 0.5) * 0.02)) }))
+
 export default function JarvisDashboard() {
   const [now, setNow] = useState(new Date())
   const [sys, setSys] = useState({ cpu: 74, ram: 15, swap: 49 })
-  const [timer, setTimer] = useState(160) // seconds -> shows 2:40 style
+  const [timer, setTimer] = useState(1500) // 25:00 focus session
+  const [running, setRunning] = useState(true)
+  const [stocks, setStocks] = useState<Stock[]>(START_STOCKS)
+  const [reactor, setReactor] = useState(520)
+
+  // tasks
+  const [tasks, setTasks] = useState<{ text: string; done: boolean }[]>(() => {
+    try {
+      const raw = localStorage.getItem('jarvis_dashboard_tasks')
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return [
+      { text: 'Q4 planning brief', done: false },
+      { text: 'Reply to client email', done: false },
+      { text: 'Lab diagnostics run', done: true },
+    ]
+  })
+  const [newTask, setNewTask] = useState('')
+  useEffect(() => { localStorage.setItem('jarvis_dashboard_tasks', JSON.stringify(tasks)) }, [tasks])
+
+  // MITs for ADHD co-pilot (top 3 undone tasks)
+  const mits = tasks.filter(t => !t.done).slice(0, 3)
+  const wins = tasks.filter(t => t.done).length
+
+  // reactor size responsive
+  useEffect(() => {
+    const fit = () => setReactor(Math.round(Math.min(560, window.innerWidth * 0.4, window.innerHeight * 0.66)))
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [])
+
   useEffect(() => {
     const id = setInterval(() => {
       setNow(new Date())
@@ -208,8 +261,19 @@ export default function JarvisDashboard() {
         ram: Math.max(5, Math.min(90, s.ram + (Math.random() - 0.5) * 4)),
         swap: Math.max(5, Math.min(90, s.swap + (Math.random() - 0.5) * 4)),
       }))
-      setTimer(t => (t <= 0 ? 300 : t - 1))
+      setTimer(t => (running ? (t <= 0 ? 1500 : t - 1) : t))
     }, 1000)
+    return () => clearInterval(id)
+  }, [running])
+
+  // stock ticker random walk
+  useEffect(() => {
+    const id = setInterval(() => {
+      setStocks(prev => prev.map(s => {
+        const np = Math.max(0.01, s.price * (1 + (Math.random() - 0.5) * 0.012))
+        return { ...s, price: np, hist: [...s.hist.slice(-19), np] }
+      }))
+    }, 2500)
     return () => clearInterval(id)
   }, [])
 
@@ -221,13 +285,20 @@ export default function JarvisDashboard() {
   const dayNum = now.getDate()
   const tMin = Math.floor(timer / 60), tSec = String(timer % 60).padStart(2, '0')
 
+  const addTask = () => {
+    const v = newTask.trim()
+    if (!v) return
+    setTasks(t => [...t, { text: v, done: false }])
+    setNewTask('')
+  }
+
   return (
     <div style={{
       position: 'fixed', inset: 0, background:
         'radial-gradient(1200px 700px at 50% 55%, rgba(10,40,55,0.55), rgba(2,6,10,0.98) 70%), #01050a',
       color: CYAN, fontFamily: '"Share Tech Mono","JetBrains Mono",monospace', overflow: 'hidden',
     }}>
-      {/* faint grid + scanlines */}
+      {/* grid + scanlines */}
       <div style={{ position: 'absolute', inset: 0, backgroundImage:
         'linear-gradient(rgba(34,211,238,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,0.04) 1px,transparent 1px)',
         backgroundSize: '46px 46px' }} />
@@ -235,137 +306,185 @@ export default function JarvisDashboard() {
         'repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.18) 3px,rgba(0,0,0,0.18) 4px)' }} />
 
       {/* ===== TOP-LEFT: clock / calendar dial ===== */}
-      <div style={{ position: 'absolute', top: '3.5%', left: '2.5%', display: 'flex', gap: 14, alignItems: 'center' }}>
-        <div style={{ position: 'relative', width: 168, height: 168 }}>
-          <svg width={168} height={168} style={HALO(10)}>
+      <div style={{ position: 'absolute', top: '3%', left: '2%', display: 'flex', gap: 14, alignItems: 'center' }}>
+        <div style={{ position: 'relative', width: 150, height: 150 }}>
+          <svg width={150} height={150} style={HALO(10)}>
             <g className="spin-slow" style={{ transformOrigin: 'center', transformBox: 'fill-box' } as any}>
-              <TickRing cx={84} cy={84} r={80} count={60} len={7} />
+              <TickRing cx={75} cy={75} r={71} count={60} len={6} />
             </g>
-            <circle cx={84} cy={84} r={66} fill="none" stroke={CYAN_DIM} strokeWidth={1} />
-            <path d={arcPath(84, 84, 66, 210, 210 - (now.getSeconds() / 60) * 300)} fill="none"
+            <circle cx={75} cy={75} r={58} fill="none" stroke={CYAN_DIM} strokeWidth={1} />
+            <path d={arcPath(75, 75, 58, 210, 210 - (now.getSeconds() / 60) * 300)} fill="none"
               stroke={CYAN} strokeWidth={3} strokeLinecap="round" style={HALO(5)} />
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ fontSize: 11, letterSpacing: 2, color: CYAN_SOFT }}>{weekday.toUpperCase()}</div>
-            <div style={{ fontSize: 40, fontWeight: 700, lineHeight: 1, textShadow: `0 0 10px ${CYAN}` }}>{dayNum}</div>
-            <div style={{ fontSize: 11, letterSpacing: 2, color: CYAN_SOFT }}>{monthName.toUpperCase()}</div>
+            <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT }}>{weekday.toUpperCase()}</div>
+            <div style={{ fontSize: 36, fontWeight: 700, lineHeight: 1, textShadow: `0 0 10px ${CYAN}` }}>{dayNum}</div>
+            <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT }}>{monthName.toUpperCase()}</div>
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: 3, textShadow: `0 0 10px ${CYAN}` }}>
-            {hh}:{mm}<span style={{ fontSize: 16, color: CYAN_SOFT }}>:{ss}</span>
+          <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: 3, textShadow: `0 0 10px ${CYAN}` }}>
+            {hh}:{mm}<span style={{ fontSize: 14, color: CYAN_SOFT }}>:{ss}</span>
           </div>
-          <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT, marginTop: 4 }}>LOCAL SYSTEM TIME</div>
-          <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_DIM }}>J.A.R.V.I.S · MARK XLII</div>
+          <div style={{ fontSize: 9, letterSpacing: 2, color: CYAN_SOFT, marginTop: 4 }}>LOCAL SYSTEM TIME</div>
+          <div style={{ fontSize: 9, letterSpacing: 2, color: CYAN_DIM }}>J.A.R.V.I.S · MARK XLII</div>
         </div>
       </div>
 
       {/* ===== TOP-CENTER: cpu / ram / swap gauges ===== */}
-      <div style={{ position: 'absolute', top: '4%', left: '38%', display: 'flex', gap: 18, alignItems: 'center' }}>
-        <Gauge size={92} value={sys.cpu} label="CPU" />
-        <Gauge size={78} value={sys.ram} label="RAM" color="#7dd3fc" />
-        <Gauge size={78} value={sys.swap} label="SWAP" color="#67e8f9" />
-      </div>
-
-      {/* ===== TOP-CENTER-RIGHT: focus timer ring ===== */}
-      <div style={{ position: 'absolute', top: '3%', left: '60%', width: 120, height: 120 }}>
-        <svg width={120} height={120} style={HALO(8)}>
-          <g className="spin-rev" style={{ transformOrigin: 'center', transformBox: 'fill-box' } as any}>
-            <TickRing cx={60} cy={60} r={56} count={48} len={6} />
-          </g>
-          <circle cx={60} cy={60} r={44} fill="none" stroke={CYAN_DIM} strokeWidth={3} />
-          <path d={arcPath(60, 60, 44, 0, (1 - timer / 300) * 359)} fill="none" stroke={CYAN}
-            strokeWidth={3} strokeLinecap="round" style={HALO(5)} />
-        </svg>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ fontSize: 26, fontWeight: 700, textShadow: `0 0 8px ${CYAN}` }}>{tMin}:{tSec}</div>
-          <div style={{ fontSize: 8, letterSpacing: 2, color: CYAN_SOFT }}>FOCUS</div>
-        </div>
+      <div style={{ position: 'absolute', top: '3.5%', left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 16, alignItems: 'center' }}>
+        <Gauge size={84} value={sys.cpu} label="CPU" />
+        <Gauge size={72} value={sys.ram} label="RAM" color="#7dd3fc" />
+        <Gauge size={72} value={sys.swap} label="SWAP" color="#67e8f9" />
       </div>
 
       {/* ===== TOP-RIGHT: header + city ===== */}
-      <div style={{ position: 'absolute', top: '3.5%', right: '2.5%', textAlign: 'right' }}>
-        <div style={{ fontSize: 12, letterSpacing: 1, color: CYAN_SOFT }}>{now.toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit' })}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
-          <WxIcon kind="moon" s={26} />
+      <div style={{ position: 'absolute', top: '3%', right: '2%', textAlign: 'right' }}>
+        <div style={{ fontSize: 11, letterSpacing: 1, color: CYAN_SOFT }}>{now.toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit' })}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <WxIcon kind="moon" s={24} />
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700, textShadow: `0 0 8px ${CYAN}` }}>13°</div>
-            <div style={{ fontSize: 10, letterSpacing: 1, color: CYAN_SOFT }}>NAIROBI · CLEAR</div>
+            <div style={{ fontSize: 20, fontWeight: 700, textShadow: `0 0 8px ${CYAN}` }}>13°</div>
+            <div style={{ fontSize: 9, letterSpacing: 1, color: CYAN_SOFT }}>NAIROBI · CLEAR</div>
           </div>
         </div>
       </div>
 
-      {/* ===== CENTER: arc reactor ===== */}
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
-        <ArcReactor size={Math.min(460, Math.round(window.innerWidth * 0.32))} />
+      {/* ===== CENTER: big arc reactor ===== */}
+      <div style={{ position: 'absolute', top: '52%', left: '50%', transform: 'translate(-50%,-50%)' }}>
+        <ArcReactor size={reactor} />
       </div>
-      {/* scattered labels around reactor */}
       {[
-        { t: '40%', l: '30%', txt: 'NEURAL LINK' }, { t: '36%', l: '64%', txt: 'REPULSOR' },
-        { t: '62%', l: '31%', txt: 'DIAGNOSTIC' }, { t: '64%', l: '63%', txt: 'STARK IND.' },
+        { t: '42%', l: '31%', txt: 'NEURAL LINK' }, { t: '38%', l: '69%', txt: 'REPULSOR' },
+        { t: '66%', l: '32%', txt: 'DIAGNOSTIC' }, { t: '68%', l: '68%', txt: 'STARK IND.' },
       ].map((p, i) => (
         <div key={i} style={{ position: 'absolute', top: p.t, left: p.l, fontSize: 9, letterSpacing: 2,
-          color: CYAN_DIM, transform: 'translate(-50%,-50%)' }}>{p.txt}</div>
+          color: CYAN_DIM, transform: 'translate(-50%,-50%)', pointerEvents: 'none' }}>{p.txt}</div>
       ))}
 
-      {/* ===== LEFT: disk + energy ===== */}
-      <div style={{ position: 'absolute', top: '34%', left: '2.5%', width: 210, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 4, color: CYAN_SOFT, textShadow: `0 0 10px ${CYAN}` }}>
+      {/* ===== LEFT COLUMN: storage, energy, ADHD co-pilot ===== */}
+      <div style={{ position: 'absolute', top: '30%', left: '2%', width: 244, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 4, color: CYAN_SOFT, textShadow: `0 0 10px ${CYAN}` }}>
           EXPO<span style={{ color: CYAN }}> 2010</span>
         </div>
         <Panel title="STORAGE VOLUME">
-          <div style={{ fontSize: 11, color: CYAN }}>Total: 100 GB</div>
-          <div style={{ fontSize: 11, color: CYAN_SOFT }}>Free: 2 GB</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+            <span style={{ color: CYAN }}>Total 100 GB</span><span style={{ color: CYAN_SOFT }}>Free 2 GB</span>
+          </div>
           <div style={{ height: 6, background: CYAN_DIM, borderRadius: 3, marginTop: 8, overflow: 'hidden' }}>
             <div style={{ width: '98%', height: '100%', background: CYAN, boxShadow: `0 0 8px ${CYAN}` }} />
           </div>
-          <div style={{ fontSize: 9, color: CYAN_DIM, marginTop: 6, lineHeight: 1.6 }}>
-            <div>▸ Local disk C:</div><div>▸ Arduino · AMP 2</div><div>▸ Dead Space · Limbo</div>
-          </div>
         </Panel>
+
+        {/* ADHD co-pilot — running inside the system */}
+        <Panel title="ADHD CO-PILOT · ACTIVE" right={<span style={{ fontSize: 8, color: UP, letterSpacing: 1 }}>● RUNNING</span>}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ position: 'relative', width: 74, height: 74, flexShrink: 0 }}>
+              <svg width={74} height={74} style={HALO(6)}>
+                <circle cx={37} cy={37} r={30} fill="none" stroke={CYAN_DIM} strokeWidth={4} />
+                <path d={arcPath(37, 37, 30, 0, (1 - timer / 1500) * 359.9)} fill="none" stroke={CYAN}
+                  strokeWidth={4} strokeLinecap="round" style={HALO(4)} />
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{tMin}:{tSec}</div>
+                <div style={{ fontSize: 7, letterSpacing: 1, color: CYAN_SOFT }}>FOCUS</div>
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, marginBottom: 4 }}>TOP 3 MITs</div>
+              {mits.length ? mits.map((m, i) => (
+                <div key={i} style={{ fontSize: 10, color: CYAN, lineHeight: 1.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {i + 1}. {m.text}
+                </div>
+              )) : <div style={{ fontSize: 10, color: UP }}>All MITs cleared — nice, Sir.</div>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <button onClick={() => setRunning(r => !r)} style={btn}>{running ? 'PAUSE' : 'START'} FOCUS</button>
+            <button onClick={() => setTimer(1500)} style={btn}>RESET</button>
+          </div>
+          <div style={{ fontSize: 9, color: CYAN_DIM, marginTop: 6 }}>Wins today: <span style={{ color: UP }}>{wins}</span> · Body-double ready</div>
+        </Panel>
+
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Gauge size={96} value={100} label="ENERGY" sub="%" />
+          <Gauge size={84} value={100} label="ENERGY" sub="%" />
           <div style={{ fontSize: 9, color: CYAN_DIM, lineHeight: 1.7 }}>
             <div>REACTOR ONLINE</div><div>OUTPUT 3.2 GJ/s</div><div>TEMP 284 K</div><div>STABLE</div>
           </div>
         </div>
       </div>
 
-      {/* ===== BOTTOM-LEFT: small gauge cluster ===== */}
-      <div style={{ position: 'absolute', bottom: '15%', left: '2.5%', display: 'flex', gap: 10 }}>
-        <Gauge size={66} value={sys.ram} label="I/O" color="#67e8f9" />
-        <Gauge size={66} value={sys.cpu} label="NET" color="#7dd3fc" />
-        <div style={{ alignSelf: 'center', fontSize: 9, color: CYAN_DIM, lineHeight: 1.7 }}>
-          <div>COMMS · ONLINE</div><div>NEW MAIL · 3</div><div>91.219.164.5</div>
-        </div>
-      </div>
-
-      {/* ===== RIGHT: weather forecast ===== */}
-      <div style={{ position: 'absolute', top: '17%', right: '2.5%', width: 232 }}>
-        <Panel title="7-DAY FORECAST · NAIROBI">
+      {/* ===== RIGHT COLUMN: weather, tasks, stocks ===== */}
+      <div style={{ position: 'absolute', top: '15%', right: '2%', width: 256, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Panel title="5-DAY FORECAST · NAIROBI">
           {FORECAST.map((f, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0',
               borderBottom: i < FORECAST.length - 1 ? `1px solid ${CYAN_DIM}` : 'none' }}>
               <div style={{ width: 44, fontSize: 10, letterSpacing: 1, color: CYAN_SOFT }}>{f.day}</div>
-              <WxIcon kind={f.icon} s={22} />
+              <WxIcon kind={f.icon} s={20} />
               <div style={{ flex: 1, fontSize: 10, color: CYAN_DIM }}>{f.desc}</div>
-              <div style={{ fontSize: 12, color: CYAN }}>{f.hi}°<span style={{ color: CYAN_DIM }}> / {f.lo}°</span></div>
+              <div style={{ fontSize: 11, color: CYAN }}>{f.hi}°<span style={{ color: CYAN_DIM }}> / {f.lo}°</span></div>
             </div>
           ))}
         </Panel>
+
+        {/* TASKS */}
+        <Panel title="TASKS" right={<span style={{ fontSize: 9, color: CYAN_SOFT }}>{tasks.filter(t => !t.done).length} OPEN</span>}>
+          <div style={{ maxHeight: 118, overflowY: 'auto' }}>
+            {tasks.map((t, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                <div onClick={() => setTasks(ts => ts.map((x, j) => j === i ? { ...x, done: !x.done } : x))}
+                  style={{ width: 14, height: 14, borderRadius: 3, border: `1px solid ${t.done ? UP : CYAN_SOFT}`,
+                    background: t.done ? UP : 'transparent', color: '#01050a', fontSize: 10, lineHeight: '12px',
+                    textAlign: 'center', cursor: 'pointer', flexShrink: 0 }}>{t.done ? '✓' : ''}</div>
+                <div style={{ flex: 1, fontSize: 11, color: t.done ? CYAN_DIM : CYAN,
+                  textDecoration: t.done ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.text}</div>
+                <span onClick={() => setTasks(ts => ts.filter((_, j) => j !== i))}
+                  style={{ fontSize: 12, color: CYAN_DIM, cursor: 'pointer' }}>×</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <input value={newTask} onChange={e => setNewTask(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Add task + Enter"
+              style={{ flex: 1, background: 'rgba(2,8,12,0.8)', border: `1px solid ${CYAN_DIM}`, color: CYAN,
+                borderRadius: 6, padding: '6px 8px', fontSize: 10, fontFamily: 'inherit', outline: 'none' }} />
+            <button onClick={addTask} style={btn}>ADD</button>
+          </div>
+        </Panel>
+
+        {/* STOCK MARKET */}
+        <Panel title="MARKET WATCH" right={<span style={{ fontSize: 8, color: UP, letterSpacing: 1 }}>● LIVE</span>}>
+          {stocks.map((s, i) => {
+            const chg = ((s.price - s.base) / s.base) * 100
+            const up = chg >= 0
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
+                borderBottom: i < stocks.length - 1 ? `1px solid ${CYAN_DIM}` : 'none' }}>
+                <div style={{ width: 46, fontSize: 11, color: CYAN, letterSpacing: 1 }}>{s.sym}</div>
+                <Sparkline data={s.hist} color={up ? UP : DOWN} w={58} h={20} />
+                <div style={{ flex: 1, textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, color: CYAN }}>{s.price >= 1000 ? s.price.toLocaleString(undefined, { maximumFractionDigits: 0 }) : s.price.toFixed(2)}</div>
+                  <div style={{ fontSize: 9, color: up ? UP : DOWN }}>{up ? '▲' : '▼'} {Math.abs(chg).toFixed(2)}%</div>
+                </div>
+              </div>
+            )
+          })}
+        </Panel>
       </div>
 
-      {/* ===== BOTTOM: audio spectrum + media controls ===== */}
-      <div style={{ position: 'absolute', bottom: '3%', left: '50%', transform: 'translateX(-50%)', width: '58%', maxWidth: 900 }}>
+      {/* ===== BOTTOM: audio spectrum + media ===== */}
+      <div style={{ position: 'absolute', bottom: '2.5%', left: '50%', transform: 'translateX(-50%)', width: '46%', maxWidth: 720 }}>
         <Panel>
           <Spectrum />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 6 }}>
             <div style={{ display: 'flex', gap: 14, color: CYAN }}>
-              <span style={{ fontSize: 16, cursor: 'pointer' }}>⏮</span>
-              <span style={{ fontSize: 18, cursor: 'pointer', textShadow: `0 0 8px ${CYAN}` }}>⏸</span>
-              <span style={{ fontSize: 16, cursor: 'pointer' }}>⏭</span>
+              <span style={{ fontSize: 15, cursor: 'pointer' }}>⏮</span>
+              <span style={{ fontSize: 17, cursor: 'pointer', textShadow: `0 0 8px ${CYAN}` }}>⏸</span>
+              <span style={{ fontSize: 15, cursor: 'pointer' }}>⏭</span>
             </div>
             <div style={{ flex: 1, height: 4, background: CYAN_DIM, borderRadius: 2, position: 'relative' }}>
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '42%', background: CYAN, borderRadius: 2, boxShadow: `0 0 8px ${CYAN}` }} />
@@ -386,7 +505,15 @@ export default function JarvisDashboard() {
         .spin-rev { animation: spinRev 18s linear infinite; }
         .spin-fast { animation: spin 9s linear infinite; }
         .pulse-core { animation: pulseCore 2.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.3); border-radius: 3px; }
       `}</style>
     </div>
   )
+}
+
+const btn: React.CSSProperties = {
+  background: 'rgba(34,211,238,0.12)', border: `1px solid ${CYAN_SOFT}`, color: CYAN,
+  borderRadius: 6, padding: '6px 10px', fontSize: 9, letterSpacing: 1, cursor: 'pointer',
+  fontFamily: 'inherit', whiteSpace: 'nowrap',
 }

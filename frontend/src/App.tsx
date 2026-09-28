@@ -36,17 +36,7 @@ export default function App() {
   }, [])
 
   if (mode === 'dashboard') {
-    return (
-      <div>
-        <div style={{position:'absolute', top:10, right:10, zIndex:100, display:'flex', gap:8, flexWrap:'wrap'}}>
-          <button onClick={()=>setMode('hud')} style={{background:'rgba(2,8,12,0.85)', border:'1px solid #22d3ee', color:'#22d3ee', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>INTERACTIVE HUD</button>
-          <button onClick={()=>setMode('circular')} style={{background:'rgba(2,8,12,0.85)', border:'1px solid #06b6d4', color:'#06b6d4', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>CIRCULAR HUD</button>
-          <button onClick={()=>setMode('adhd')} style={{background:'rgba(2,8,12,0.85)', border:'1px solid #a78bfa', color:'#a78bfa', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>ADHD CO-PILOT</button>
-          <button onClick={()=>setMode('chat')} style={{background:'rgba(2,8,12,0.85)', border:'1px solid #e2e8f0', color:'#e2e8f0', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>CLASSIC</button>
-        </div>
-        <JarvisDashboard />
-      </div>
-    )
+    return <JarvisDashboard />
   }
 
   if (mode === 'adhd') {
