@@ -40,17 +40,22 @@ jobs:
       - name: Package local API, HUD, and hands-free companion
         shell: pwsh
         run: |
-          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice --collect-all faster_whisper --collect-all uvicorn src/jarvis/cli/hud_launcher.py
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --add-data "voice;voice" --add-data "piper;piper" --collect-all jarvis --collect-all sounddevice --collect-all faster_whisper --collect-all uvicorn src/jarvis/cli/hud_launcher.py
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD.exe)) { throw "HUD EXE build failed" }
 
-      - name: Verify voice assets
+      - name: Download JARVIS neural voice assets
         shell: pwsh
         run: |
-          if (Test-Path voice/jarvis-medium.onnx) {
-            Write-Host "Bundling local JARVIS voice model."
-          } else {
-            Write-Host "No restricted voice model bundled; Piper path remains optional and SAPI fallback is enabled."
-          }
+          New-Item -ItemType Directory -Force -Path voice, piper | Out-Null
+          Invoke-WebRequest -Uri "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx" -OutFile "voice/jarvis-medium.onnx"
+          Invoke-WebRequest -Uri "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx.json" -OutFile "voice/jarvis-medium.onnx.json"
+          Invoke-WebRequest -Uri "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip" -OutFile "$env:TEMP\\piper_windows_amd64.zip"
+          Expand-Archive -Path "$env:TEMP\\piper_windows_amd64.zip" -DestinationPath piper -Force
+          $piperExe = Get-ChildItem piper -Filter piper.exe -Recurse | Select-Object -First 1
+          if (-not $piperExe) { throw "Piper executable was not found after extraction." }
+          $piperRoot = $piperExe.Directory.FullName
+          Copy-Item "$piperRoot\\*" piper -Recurse -Force
+          Write-Host "JARVIS neural voice and Piper runtime ready."
 
       - name: Install WiX v3
         shell: pwsh
