@@ -1,17 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <!-- JARVIS SHILATECH MSI installer, WiX Toolset v3.11+. -->
-  <!-- ProductVersion is supplied by candle with -dProductVersion=x.y.z. -->
-  <Product Id="*"
-           Name="JARVIS - SHILATECH - Personal AI, On Personal Devices"
-           Language="1033"
-           Version="$(var.ProductVersion)"
-           Manufacturer="SHILATECH"
+  <Product Id="*" Name="JARVIS - SHILATECH - Personal AI, On Personal Devices"
+           Language="1033" Version="$(var.ProductVersion)" Manufacturer="SHILATECH"
            UpgradeCode="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
-
-    <Package InstallerVersion="200"
-             Compressed="yes"
-             InstallScope="perMachine"
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"
              Description="JARVIS SHILATECH — Local-first Personal AI"
              Comments="Apache 2.0 License SHILATECH" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
@@ -34,12 +27,20 @@
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLFOLDER" Name="JARVIS SHILATECH" />
       </Directory>
-      <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="JARVIS SHILATECH" />
+      <!-- Machine-wide Start Menu location keeps this component per-machine. -->
+      <Directory Id="CommonAppDataFolder">
+        <Directory Id="ProgramDataMicrosoft" Name="Microsoft">
+          <Directory Id="ProgramDataWindows" Name="Windows">
+            <Directory Id="ProgramDataStartMenu" Name="Start Menu">
+              <Directory Id="ProgramDataPrograms" Name="Programs">
+                <Directory Id="JARVISStartMenuFolder" Name="JARVIS SHILATECH" />
+              </Directory>
+            </Directory>
+          </Directory>
+        </Directory>
       </Directory>
     </Directory>
 
-    <!-- The MSI contains the one-file executable produced by PyInstaller. -->
     <DirectoryRef Id="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="*">
         <File Id="JarvisExe" Source="dist\jarvis.exe" KeyPath="yes" />
@@ -49,51 +50,29 @@
       </Component>
     </DirectoryRef>
 
-    <DirectoryRef Id="ApplicationProgramsFolder">
+    <DirectoryRef Id="JARVISStartMenuFolder">
       <Component Id="StartMenuShortcut" Guid="*">
-        <Shortcut Id="ApplicationStartMenuShortcut"
-                  Name="JARVIS SHILATECH"
+        <Shortcut Id="ApplicationStartMenuShortcut" Name="JARVIS SHILATECH"
                   Description="Personal AI, voice works online and offline"
-                  Target="[INSTALLFOLDER]jarvis.exe"
-                  WorkingDirectory="INSTALLFOLDER" />
-        <Shortcut Id="ApplicationChatShortcut"
-                  Name="JARVIS Chat SHILATECH"
-                  Description="Interactive JARVIS chat"
-                  Target="[INSTALLFOLDER]jarvis.exe"
-                  Arguments="chat --interactive"
-                  WorkingDirectory="INSTALLFOLDER" />
-        <Shortcut Id="UninstallProduct"
-                  Name="Uninstall JARVIS SHILATECH"
-                  Description="Uninstall JARVIS SHILATECH"
-                  Target="[System64Folder]msiexec.exe"
+                  Target="[INSTALLFOLDER]jarvis.exe" WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="ApplicationChatShortcut" Name="JARVIS Chat SHILATECH"
+                  Description="Interactive JARVIS chat" Target="[INSTALLFOLDER]jarvis.exe"
+                  Arguments="chat --interactive" WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="UninstallProduct" Name="Uninstall JARVIS SHILATECH"
+                  Description="Uninstall JARVIS SHILATECH" Target="[System64Folder]msiexec.exe"
                   Arguments="/x [ProductCode]" />
-        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
-        <RegistryValue Root="HKLM"
-                       Key="Software\SHILATECH\JARVIS"
-                       Name="installed"
-                       Type="integer"
-                       Value="1"
-                       KeyPath="yes" />
+        <RemoveFolder Id="CleanUpShortCut" Directory="JARVISStartMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\SHILATECH\JARVIS" Name="installed"
+                       Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 
-    <!-- Put the install directory on the machine PATH and use HKLM as the
-         component key path because this is a per-machine package. -->
     <DirectoryRef Id="TARGETDIR">
       <Component Id="PathEnv" Guid="*">
-        <Environment Id="PATH"
-                     Name="PATH"
-                     Value="[INSTALLFOLDER]"
-                     Permanent="no"
-                     Part="last"
-                     Action="set"
-                     System="yes" />
-        <RegistryValue Root="HKLM"
-                       Key="Software\SHILATECH\JARVIS"
-                       Name="path"
-                       Type="integer"
-                       Value="1"
-                       KeyPath="yes" />
+        <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no"
+                     Part="last" Action="set" System="yes" />
+        <RegistryValue Root="HKLM" Key="Software\SHILATECH\JARVIS" Name="path"
+                       Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
   </Product>
