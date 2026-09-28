@@ -689,54 +689,44 @@ class CircularHUDApp(tk.Tk):
             pass
 
     def good_morning(self):
+        """Build the startup panel from live weather, markets, news and local tasks."""
         try:
-            hour = datetime.now().hour
-            greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
-            date_str = datetime.now().strftime("%A, %B %d")
-            time_str = datetime.now().strftime("%I:%M %p")
-            mit_text = "\n".join([f"{i+1}. {m}" for i, m in enumerate(self.mits)])
-            online_text = f"Hybrid: {self.online_status.get('mode','CHECKING')} via {self.online_status.get('engine','auto')} — Online full stack when online, basic when offline, Sir. SHILATECH."
-
-            msg = f"""{greeting}, {self.user_name}. It's {time_str} on {date_str}.
-
-Arc reactor at {self._arc_power:.1f}% — All systems nominal. Lab secure, perimeter clear. SHILATECH.
-
-{online_text}
-
-Today's Alignment — 3 MITs to make today a win:
-{mit_text}
-
-Schedule: You have 3 meetings today, including Q4 planning at 2 PM. I've prepared a brief — shall I display it?
-
-Energy: Based on your pattern, you're usually high focus 10-11am. Recommend tackling MIT 1 then.
-
-What would you like to do first, Sir?
-
-• Say "Show my tasks" for full list
-• "Focus on Q4 brief" to start Pomodoro with body double
-• "Brain dump" if mind feels full
-• "network_status" to check hybrid online/offline
-• "hybrid_mode interactive" to decide Full Stack vs Basic Local even though online
-• Voice: Click 🎤 to speak — offline browser API + pyttsx3/kokoro offline backend speaks both online/offline
-
-🔊 Voice: ON — JARVIS speaks both online & offline, Sir. Circular HUD like screenshot — same interface local and online, only badge changes.
-
-SHILATECH • Malibu Point 10880"""
-
+            from jarvis.startup.morning_brief import build_brief, voice_script
+            brief = build_brief(self.user_name, self.mits)
+            w = brief["weather"]
+            weather_text = (
+                f'{w.get("city","Nairobi")}: {w.get("temp","--")}°C • '
+                f'{w.get("condition","Unavailable")} • High {w.get("high","--")}° / Low {w.get("low","--")}° • '
+                f'Rain {w.get("rain","--")}%'
+            )
+            market_text = " • ".join(
+                f'{x["label"]} {x.get("pct",0):+.1f}%'
+                for x in brief["markets"] if "pct" in x
+            ) or "Market data unavailable"
+            headline_text = "\n".join(
+                f'• {x["title"]}' for x in brief["news"][:4]
+            ) or "• Latest headlines unavailable"
+            task_text = "\n".join(
+                f'{i+1}. {task}' for i, task in enumerate(self.mits[:3])
+            ) or "No priority tasks configured — ask me to plan your day."
+            msg = (
+                f'{brief["greeting"]}, {self.user_name}. It\'s {brief["time"]} on {brief["date"]}.\n\n'
+                "SYSTEM BOOT: All core systems nominal. Ollama local AI ready.\n\n"
+                "WEATHER\n" + weather_text + "\n\n"
+                "TODAY'S PRIORITY TASKS\n" + task_text + "\n\n"
+                "MARKET WATCH\n" + market_text + "\n\n"
+                "LATEST NEWS\n" + headline_text + "\n\n"
+                "Good to have you back, Sir. What shall we work on first?"
+            )
             self.add_message("assistant", msg)
-            # Voice initialization - auto-speak Good Morning with TTS both online/offline
-            try:
-                if getattr(self, 'voice_enabled', True):
-                    voice_text = f"{greeting}, {self.user_name}. It's {time_str} on {date_str}. Arc reactor at {self._arc_power:.1f} percent. All systems nominal. Lab secure. Today's alignment {len(self.mits)} MITs to make today a win. SHILATECH secure. I speak both online and offline, Sir."
-                    self.after(1500, lambda: self.speak(voice_text))
-                    if logging:
-                        logging.info("Voice auto-initialized, speaking Good Morning: %s", voice_text[:80])
-            except Exception as ve:
-                if logging:
-                    logging.error("Voice auto-speak failed: %s", ve)
+            if getattr(self, "voice_enabled", True):
+                self.after(700, lambda: self.speak(voice_script(brief)))
         except Exception as e:
             if logging:
                 logging.error("good_morning failed: %s", e)
+            self.add_message("assistant", f"Good morning, {self.user_name}. JARVIS is online, Sir. Live briefing is temporarily unavailable.")
+            if getattr(self, "voice_enabled", True):
+                self.after(700, lambda: self.speak(f"Good morning, {self.user_name}. JARVIS is online and ready, Sir."))
 
     def add_message(self, role, content):
         try:
@@ -798,53 +788,17 @@ System: All nominal. Arc reactor {self._arc_power:.1f}%. Lab secure. SHILATECH.
                 logging.error("send_prompt failed: %s", e)
 
     def speak(self, text):
-        # Voice speaks both online/offline - pyttsx3 offline + Windows SAPI
-        if not getattr(self, 'voice_enabled', True):
+        """Use the shared British JARVIS-inspired Windows SAPI voice."""
+        if not getattr(self, "voice_enabled", True):
             return
         try:
-            # Try pyttsx3 offline
-            import pyttsx3
-            def tts_thread():
-                try:
-                    engine = pyttsx3.init()
-                    engine.setProperty('rate', 180)
-                    # Try British voice
-                    voices = engine.getProperty('voices')
-                    for v in voices:
-                        if 'british' in v.name.lower() or 'uk' in v.name.lower() or 'english' in v.name.lower():
-                            engine.setProperty('voice', v.id)
-                            break
-                    # Clean text for speech
-                    clean = text[:400].replace('```',' ').replace('*','').replace('#','').replace('•','').replace('—',' ')
-                    engine.say(clean)
-                    engine.runAndWait()
-                except Exception as e:
-                    if logging:
-                        logging.error("TTS pyttsx3 failed: %s", e)
-                    # Fallback to Windows SAPI via win32com
-                    try:
-                        import win32com.client
-                        speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                        speaker.Speak(text[:400])
-                    except:
-                        try:
-                            import subprocess
-                            subprocess.run(["espeak", text[:400]], timeout=5)
-                        except:
-                            pass
-            threading.Thread(target=tts_thread, daemon=True).start()
+            from jarvis.voice import speak as jarvis_speak
+            jarvis_speak(text, asynchronous=True)
             if logging:
-                logging.info("Speaking: %s", text[:100])
+                logging.info("Speaking with JARVIS voice: %s", text[:100])
         except Exception as e:
             if logging:
-                logging.error("Speak failed: %s", e)
-            # Fallback: try Windows PowerShell SAPI
-            try:
-                import subprocess
-                ps_cmd = f'Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak("{text[:200].replace(chr(34), "")}");'
-                threading.Thread(target=lambda: subprocess.run(["powershell", "-Command", ps_cmd], timeout=10), daemon=True).start()
-            except:
-                pass
+                logging.error("JARVIS voice failed: %s", e)
 
     def voice_input(self):
         self.add_message("system", "🎤 Voice input — listening, Sir. SHILATECH voice uses offline API.\n\nIn frontend circular HUD real mic works via Web Audio API + SpeechRecognition browser offline.\n\nDesktop: pip install faster-whisper + sounddevice for real mic, or type.\n\nTry: 'Good morning Eugene', 'network_status', 'hybrid_mode interactive'")
