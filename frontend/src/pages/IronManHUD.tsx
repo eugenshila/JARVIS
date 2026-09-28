@@ -357,52 +357,123 @@ export default function IronManHUD() {
     }
   }
 
-  const startVoice = async () => {
+  const recognitionRef = useRef<any>(null)
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const handsFreeRef = useRef(false)
+  const restartingRef = useRef(false)
+
+  const stopVoice = () => {
+    handsFreeRef.current = false
+    restartingRef.current = false
+    try { recognitionRef.current?.stop() } catch {}
+    recognitionRef.current = null
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(t => t.stop())
+      micStreamRef.current = null
+    }
+    try { audioContextRef.current?.close() } catch {}
+    audioContextRef.current = null
+    analyserRef.current = null
+    setIsListening(false)
+  }
+
+  const startVoice = async (handsFree = true) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({audio:true})
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const analyser = audioCtx.createAnalyser()
-      const source = audioCtx.createMediaStreamSource(stream)
-      source.connect(analyser)
-      analyser.fftSize = 2048
-      audioContextRef.current = audioCtx
-      analyserRef.current = analyser
-      setIsListening(true)
-      
-      // Simple speech recognition if available
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      if (SpeechRecognition) {
-        const rec = new SpeechRecognition()
-        rec.continuous = false
-        rec.interimResults = false
-        rec.lang = 'en-US'
-        rec.onresult = (event:any) => {
-          const transcript = event.results[0][0].transcript
+      if (!SpeechRecognition) {
+        console.warn('Speech recognition is not available in this browser')
+        return
+      }
+
+      // Request microphone permission once. The permission normally persists for this site.
+      if (!micStreamRef.current) {
+        micStreamRef.current = await navigator.mediaDevices.getUserMedia({audio:true})
+      }
+
+      const stream = micStreamRef.current
+      if (!audioContextRef.current) {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+        const analyser = audioCtx.createAnalyser()
+        const source = audioCtx.createMediaStreamSource(stream)
+        source.connect(analyser)
+        analyser.fftSize = 2048
+        audioContextRef.current = audioCtx
+        analyserRef.current = analyser
+      }
+
+      handsFreeRef.current = handsFree
+      setIsListening(true)
+
+      try { recognitionRef.current?.stop() } catch {}
+
+      const rec = new SpeechRecognition()
+      recognitionRef.current = rec
+      rec.continuous = true
+      rec.interimResults = false
+      rec.lang = 'en-US'
+      rec.maxAlternatives = 1
+
+      rec.onresult = (event:any) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (!event.results[i].isFinal) continue
+          const transcript = String(event.results[i][0]?.transcript || '').trim()
+          if (!transcript) continue
+
+          // Hands-free mode accepts commands directly. If wake-word mode is enabled
+          // later, this same pipeline can gate commands on "Jarvis".
           setInput(transcript)
           send(transcript)
-          setIsListening(false)
-          stream.getTracks().forEach(t=>t.stop())
         }
-        rec.onerror = () => {
-          setIsListening(false)
-          stream.getTracks().forEach(t=>t.stop())
-        }
-        rec.onend = () => {
-          setIsListening(false)
-        }
-        rec.start()
-      } else {
-        // No speech recognition, just show waveform for 3 sec
-        setTimeout(()=>{
-          setIsListening(false)
-          stream.getTracks().forEach(t=>t.stop())
-        }, 3000)
       }
+
+      rec.onerror = (event:any) => {
+        console.warn('Voice recognition:', event?.error || 'unknown error')
+        if (event?.error === 'not-allowed' || event?.error === 'service-not-allowed') {
+          handsFreeRef.current = false
+          setIsListening(false)
+        }
+      }
+
+      rec.onend = () => {
+        if (!handsFreeRef.current || restartingRef.current) return
+        // Chrome/Edge can end a continuous recognition session unexpectedly.
+        // Restart automatically so the user does not need to touch the mic again.
+        restartingRef.current = true
+        setTimeout(() => {
+          restartingRef.current = false
+          if (!handsFreeRef.current) return
+          try {
+            recognitionRef.current = null
+            startVoice(true)
+          } catch {}
+        }, 350)
+      }
+
+      rec.start()
     } catch (e) {
       console.error('Mic failed', e)
-      setIsListening(!isListening)
+      handsFreeRef.current = false
+      setIsListening(false)
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop())
+        micStreamRef.current = null
+      }
     }
   }
+
+  // Hands-free voice: after the user has granted microphone permission once,
+  // automatically restore listening whenever the HUD is opened.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      startVoice(true).catch(() => {})
+    }, 900)
+
+    return () => {
+      window.clearTimeout(timer)
+      stopVoice()
+    }
+  }, [])
+
 
   return (
     <div style={{height:'100vh', background:'#020208', color:'#22c55e', fontFamily:'"JetBrains Mono", "Share Tech Mono", monospace', overflow:'hidden', position:'relative'}}>
