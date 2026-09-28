@@ -78,6 +78,30 @@ try:
 except ImportError:
     HAS_STARTUP = False
 
+try:
+    from jarvis.tools.adhd_state import ADHDStateTool
+    HAS_ADHD_STATE = True
+except ImportError:
+    HAS_ADHD_STATE = False
+
+try:
+    from jarvis.tools.app_launcher import AppLauncherTool
+    HAS_APP_LAUNCHER = True
+except ImportError:
+    HAS_APP_LAUNCHER = False
+
+try:
+    from jarvis.tools.connection_tools import ConnectionStatusTool
+    HAS_CONNECTIONS = True
+except ImportError:
+    HAS_CONNECTIONS = False
+
+try:
+    from jarvis.tools.career_tools import CareerTool
+    HAS_CAREER = True
+except ImportError:
+    HAS_CAREER = False
+
 
 REGISTRY: dict[str, type[BaseTool]] = {
     "file_read": FileReadTool,
@@ -137,6 +161,19 @@ if HAS_STARTUP:
         "greeting": GreetingTool,
         "task_alignment": TaskAlignmentTool,
     })
+
+if HAS_ADHD_STATE:
+    REGISTRY["adhd_state"] = ADHDStateTool
+
+if HAS_APP_LAUNCHER:
+    REGISTRY["app_launcher"] = AppLauncherTool
+
+if HAS_CONNECTIONS:
+    REGISTRY["connections"] = ConnectionStatusTool
+
+if HAS_CAREER:
+    REGISTRY["career_os"] = CareerTool
+    REGISTRY["career"] = CareerTool
 
 try:
     from jarvis.tools.calendar_tools import CalendarToolEnhanced, TaskLearningTool, WeatherTool

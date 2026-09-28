@@ -1,14 +1,27 @@
 # Pre-MSI Checklist — Ready to Build
 
-**Date:** 2026-09-26  
-**Current Commit:** 9bf802a + fixes  
-**Tools:** 47  
+**Date:** 2026-09-28  
+**Current Commit:** arena/01a0e73a-jarvis working branch  
+**Tools:** 59  
 **Frontend:** 6 modes, build passes  
-**Constraint:** No MSI built yet until explored — now explored, ready to build
+**Constraint:** Connected features added with local-first safety before MSI
 
 ---
 
 ## ✅ Fixed Blockers (Before MSI)
+
+### 0. Connected-Assistant Safety Checks
+**Added before MSI install:**
+- ADHD state uses an operational support mode, not a medical severity/diagnosis
+- New `jarvis adhd-state` command and HUD daily support-state card
+- Google Calendar/Gmail OAuth status + setup path surfaced through `jarvis connect ...` and HUD preflight endpoints
+- Microsoft Outlook/365 guidance added for Graph OAuth read-only scopes
+- Local calendar/email fallback paths documented
+- Safe installed-software launcher added with allow-list, script blocking, and explicit launch confirmation
+- JAUTOMATIC Career OS connector added for job search, training, follow-ups, and employed-mode career growth
+- No PostgreSQL requirement: personal MSI remains SQLite/JSON local-first
+- Circular HUD now shows ADHD state, connection status, Career OS, and approved app buttons
+- Tests added for support-state, connection status, and app-launcher safety
 
 ### 1. .gitignore Comprehensive
 **Before:** Only __pycache__, *.py[cod], .env, .venv  
@@ -55,7 +68,7 @@
 
 ### 6. Conflict Markers
 **Before:** Main had <<<<<<< HEAD markers in IronManHUD.tsx, registry.py, cli/main.py → syntax errors  
-**After:** All cleaned, 47 tools verified, IronManHUD.tsx uses ArcReactor3D component, no markers
+**After:** All cleaned, 61 tools verified, IronManHUD.tsx uses ArcReactor3D component, no markers
 
 ---
 
@@ -71,7 +84,7 @@ PYTHONPATH=src python -m jarvis.cli.main doctor
 # Recommendations show laptop guide
 
 PYTHONPATH=src python -c "list_tools()"
-# 47 tools
+# 61 tools
 ```
 
 ### Tools
@@ -186,7 +199,7 @@ python app.py  # Desktop GUI Iron Man HUD stays open
 
 - ✅ No conflict markers
 - ✅ No syntax errors
-- ✅ 47 tools importable
+- ✅ 61 tools importable
 - ✅ Frontend builds 221kB
 - ✅ Doctor works
 - ✅ app.py stays open (fixed disappearing)
@@ -219,7 +232,7 @@ python app.py  # Desktop GUI Iron Man HUD stays open
 ## 🎯 After MSI — What User Gets
 
 1. **Double-click MSI** → installs JARVIS to Program Files\JARVIS, adds to PATH, Start Menu shortcut
-2. **Run `jarvis` anywhere** → CLI with 47 tools, 11 agents
+2. **Run `jarvis` anywhere** → CLI with 61 tools, 11 agents
 3. **Run `python app.py` or Start Menu JARVIS** → Desktop GUI Iron Man HUD stays open, Good Morning Eugene, 3 MITs, task alignment
 4. **Frontend HUD** → `cd frontend && npm run dev` → http://localhost:5173 → Iron Man HUD with 3D reactor, body double, arc 3D modes
 5. **Autostart** → `jarvis autostart enable --mode ironman` → Good Morning Eugene on boot
