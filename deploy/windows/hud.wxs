@@ -20,8 +20,6 @@
       <Component Id="HudExecutable" Guid="*">
         <File Id="HudExe" Source="dist\JARVIS-HUD.exe" />
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
-        <RegistryValue Root="HKCU" Key="Software\SHILATECH\JARVIS" Name="Executable"
-                       Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="APPLICATIONFOLDER">
@@ -37,7 +35,7 @@
       <Component Id="StartupShortcutComponent" Guid="*">
         <Shortcut Id="StartupShortcut" Name="SHILATECH JARVIS" Description="Start SHILATECH JARVIS after Windows sign-in"
                   Target="[INSTALLFOLDER]JARVIS-HUD.exe" WorkingDirectory="INSTALLFOLDER" />
-        <RegistryValue Root="HKCU" Key="Software\Shilatech\JARVIS HUD" Name="StartupShortcut"
+        <RegistryValue Root="HKCU" Key="Software\SHILATECH\JARVIS" Name="StartupShortcut"
                        Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
