@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import IronMan from './pages/IronMan'
 import IronManHUD from './pages/IronManHUD'
 import ADHDPage from './pages/ADHD'
@@ -20,6 +20,15 @@ const AGENTS = [
   { id: 'code_assistant', name: 'Code Assistant', desc: 'File I/O + shell' },
 ]
 
+class AppErrorBoundary extends React.Component<{children: React.ReactNode}, {error: Error | null}> {
+  state = { error: null as Error | null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) return <div style={{minHeight:'100vh',background:'#020208',color:'#22c55e',fontFamily:'monospace',padding:40}}><h1>JARVIS HUD ERROR</h1><pre style={{whiteSpace:'pre-wrap',color:'#fca5a5'}}>{this.state.error.stack || this.state.error.message}</pre></div>
+    return this.props.children
+  }
+}
+
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -35,7 +44,7 @@ export default function App() {
   }, [])
 
   if (mode === 'adhd') {
-    return (
+    return <AppErrorBoundary><div style={{position:'relative',minHeight:'100vh'}}>
       <div>
         <div style={{position:'absolute', top:10, right:10, zIndex:10, display:'flex', gap:8, flexWrap:'wrap'}}>
           <button onClick={()=>setMode('hud')} style={{background:'#020208', border:'1px solid #22c55e', color:'#22c55e', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>IRON MAN HUD</button>
@@ -243,5 +252,5 @@ export default function App() {
         </main>
       </div>
     </div>
-  )
-}
+  </div></AppErrorBoundary>
+}}
