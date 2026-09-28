@@ -50,7 +50,7 @@ def _powershell_speak(text:str)->None:
             "$preferred=@('Microsoft George','George','Microsoft Ryan','Ryan','Microsoft David','David'); "
             "$chosen=$null; foreach($p in $preferred){$chosen=$voices | Where-Object {$_.VoiceInfo.Name -eq $p} | Select-Object -First 1; if($chosen){break}}; "
             "if($chosen){$s.SelectVoice($chosen.VoiceInfo.Name)}; "
-            f"$s.Rate={rate}; $s.Volume={volume}; f"$s.Speak('{clean}')"")
+            f"$s.Rate={rate}; $s.Volume={volume}; $s.Speak('{clean}')"")
     # PowerShell does not interpret the Python f-string above; build the final command explicitly.
     script=script.replace('f"$s.Speak(', '$s.Speak(').replace('')"+")','')')
     subprocess.run(["powershell","-NoProfile","-Command",script],timeout=60,check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
