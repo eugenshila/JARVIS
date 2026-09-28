@@ -23,7 +23,20 @@ export default function IronManHUD() {
   ])
   const [energyPattern, setEnergyPattern] = useState('High focus 10-11am — MIT 1 then')
   const [onlineStatus, setOnlineStatus] = useState<{online:boolean, engine:string, mode:string, latency?:number}>({online: typeof navigator !== "undefined" ? navigator.onLine : true, engine: 'auto', mode: 'CHECKING'})
+  const [showDecision, setShowDecision] = useState(false)
+  const [forcedMode, setForcedMode] = useState<'full' | 'basic'>('full')
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const decideMode = (choice: '1' | '2') => {
+    if (choice === '2') {
+      setForcedMode('basic')
+      setShowDecision(false)
+      setOnlineStatus(s => ({...s, mode: 'BASIC LOCAL'}))
+    } else {
+      setForcedMode('full')
+      setShowDecision(false)
+      setOnlineStatus(s => ({...s, mode: s.engine === 'ollama' ? 'FULL LOCAL ONLINE' : s.engine === 'openai' ? 'FULL STACK ONLINE' : 'ONLINE BUT BASIC'}))
+    }
+  }
   const waveformRef = useRef<HTMLCanvasElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
