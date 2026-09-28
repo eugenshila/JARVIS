@@ -43,7 +43,16 @@ jobs:
           python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice --collect-all faster_whisper --collect-all uvicorn src/jarvis/cli/hud_launcher.py
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD.exe)) { throw "HUD EXE build failed" }
 
-      - name: Verify voice assets\n        shell: pwsh\n        run: |\n          if (Test-Path voice/jarvis-medium.onnx) { Write-Host "Bundling local JARVIS voice model." } else { Write-Host "No restricted voice model bundled; Piper path remains optional and SAPI fallback is enabled." }\n\n      - name: Install WiX v3
+      - name: Verify voice assets
+        shell: pwsh
+        run: |
+          if (Test-Path voice/jarvis-medium.onnx) {
+            Write-Host "Bundling local JARVIS voice model."
+          } else {
+            Write-Host "No restricted voice model bundled; Piper path remains optional and SAPI fallback is enabled."
+          }
+
+      - name: Install WiX v3
         shell: pwsh
         run: |
           choco install wixtoolset --no-progress -y
