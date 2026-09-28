@@ -26,6 +26,7 @@ from jarvis.engine.registry import get_engine, list_engines
 from jarvis.memory.store import MemoryStore
 from jarvis.skills.registry import SkillRegistry
 from jarvis.telemetry.monitor import TelemetryStore
+from jarvis.voice import read_voice_status, available_voice
 
 
 app = FastAPI(title="JARVIS API", version="0.1.0", description="Personal AI, On Personal Devices")
@@ -92,6 +93,13 @@ async def hud_status():
         return {"ollama": "ready" if installed else "model_missing", "model": HUD_MODEL}
     except (OSError, ValueError) as exc:
         return {"ollama": "unavailable", "model": HUD_MODEL, "detail": str(exc)}
+
+
+@app.get("/hud/voice-status")
+async def hud_voice_status():
+    status = await asyncio.to_thread(read_voice_status)
+    status["voice_name"] = available_voice()
+    return status
 
 
 @app.post("/hud/chat")
