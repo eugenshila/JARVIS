@@ -247,7 +247,7 @@ export default function JarvisDashboard() {
 
   // reactor size responsive
   useEffect(() => {
-    const fit = () => setReactor(Math.round(Math.min(720, window.innerWidth * 0.48, window.innerHeight * 0.82)))
+    const fit = () => setReactor(Math.round(Math.min(820, window.innerWidth * 0.52, window.innerHeight * 0.88)))
     fit()
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)
@@ -285,28 +285,49 @@ export default function JarvisDashboard() {
   const dayNum = now.getDate()
   const tMin = Math.floor(timer / 60), tSec = String(timer % 60).padStart(2, '0')
 
-  // --- ADHD day plan: derive a time-blocked schedule + "do now" + tips ---
+  // --- ADHD day plan: energy-aware schedule + "do now" + smart tips ---
   const mitText = (i: number) => mits[i]?.text || ['Deep work block', 'Second priority', 'Third priority'][i]
+
+  // Energy curve across the day (ADHD-friendly: peak AM, post-lunch dip, PM second wind)
+  const energyFor = (h: number) => {
+    if (h < 6) return { level: 'LOW', pct: 20, note: 'Rest — protect your sleep', color: DOWN }
+    if (h < 9) return { level: 'RISING', pct: 55, note: 'Ease in — hydrate, quick wins', color: CYAN }
+    if (h < 12) return { level: 'PEAK', pct: 96, note: 'Peak focus — do your hardest MIT now', color: UP }
+    if (h < 13) return { level: 'GOOD', pct: 72, note: 'Still sharp — finish deep work', color: UP }
+    if (h < 15) return { level: 'DIP', pct: 38, note: 'Post-lunch dip — admin, not deep work', color: '#fbbf24' }
+    if (h < 18) return { level: 'SECOND WIND', pct: 70, note: 'Second wind — tackle MIT 2 & 3', color: UP }
+    if (h < 21) return { level: 'WIND-DOWN', pct: 46, note: 'Wrap up and plan tomorrow', color: CYAN }
+    return { level: 'LOW', pct: 24, note: 'Wind down — screens off soon', color: DOWN }
+  }
+  const energy = energyFor(now.getHours())
+
   const dayPlan = [
-    { s: 9, t: '09:00', label: `Deep work · ${mitText(0)}`, tip: 'Phone away, one tab only' },
-    { s: 10.5, t: '10:30', label: 'Movement break · 5-min walk', tip: 'Dopamine hit + water' },
-    { s: 10.75, t: '10:45', label: `Focus · ${mitText(1)}`, tip: '25-min sprints, then rest' },
-    { s: 12, t: '12:00', label: 'Lunch + reset', tip: 'No screens, just breathe' },
-    { s: 13, t: '13:00', label: `Focus · ${mitText(2)}`, tip: 'Body-double on for momentum' },
-    { s: 14.5, t: '14:30', label: 'Admin · email & messages', tip: 'The 2-minute rule' },
-    { s: 16, t: '16:00', label: 'Log wins + plan tomorrow', tip: 'Celebrate small wins' },
+    { s: 7, t: '07:00', label: 'Morning routine · hydrate + move', tip: 'Sunlight + water wakes the brain', ph: 'RISING' },
+    { s: 9, t: '09:00', label: `Peak deep work · ${mitText(0)}`, tip: 'Hardest MIT first, one tab only', ph: 'PEAK' },
+    { s: 10.5, t: '10:30', label: 'Movement break · 5-min walk', tip: 'Dopamine reset before the next block', ph: 'PEAK' },
+    { s: 10.75, t: '10:45', label: `Deep work · ${mitText(1)}`, tip: '25-min sprints, short rests', ph: 'PEAK' },
+    { s: 12, t: '12:00', label: 'Lunch + reset', tip: 'No screens — a real break', ph: 'DIP' },
+    { s: 13, t: '13:00', label: 'Admin · email & messages', tip: '2-minute rule during the dip', ph: 'DIP' },
+    { s: 15, t: '15:00', label: `Second wind · ${mitText(2)}`, tip: 'Body-double on for momentum', ph: 'SECOND WIND' },
+    { s: 16.5, t: '16:30', label: 'Log wins + plan tomorrow', tip: 'Celebrate small wins', ph: 'WIND-DOWN' },
   ]
   const nowFloat = now.getHours() + now.getMinutes() / 60
   let doNow = dayPlan[0]
   for (const b of dayPlan) if (nowFloat >= b.s) doNow = b
-  const improveTips = [
-    'Pick ONE task now — hide the rest',
-    'Start a 25-min focus sprint (body-double)',
-    'Move + hydrate before your first MIT',
-    'Overwhelmed? Brain-dump, then choose 3 MITs',
-    'Break big tasks into 10-minute steps',
-  ]
-  const tipOfNow = improveTips[now.getMinutes() % improveTips.length]
+
+  // Smart tips chosen by current energy phase (rotates within the phase)
+  const tipsByEnergy: Record<string, string[]> = {
+    RISING: ['Start small to build momentum', 'Write today’s 3 MITs before anything else', 'Move + hydrate before MIT 1'],
+    PEAK: ['Attack your hardest MIT — this is prime time', 'Silence notifications, single-task 25 min', 'Batch similar deep tasks while sharp'],
+    GOOD: ['Keep going — one more 25-min sprint', 'Pick the next MIT, hide the rest', 'Use a body-double for accountability'],
+    DIP: ['Low energy? Do admin/email, not deep work', 'Take a real break — walk, water, daylight', 'Shrink the task to a 10-minute step'],
+    'SECOND WIND': ['Ride the second wind — tackle MIT 2 or 3', 'Set a 25-min timer and just start', 'Clear one quick win for momentum'],
+    'WIND-DOWN': ['Log your wins — celebrate progress', 'Plan tomorrow’s 3 MITs now', 'Tidy one thing, then stop'],
+    LOW: ['Rest is productive — protect your sleep', 'Brain-dump worries to clear your head', 'No new tasks — you’ve done enough today'],
+  }
+  const phaseTips = tipsByEnergy[energy.level] || tipsByEnergy.GOOD
+  const tipOfNow = phaseTips[now.getMinutes() % phaseTips.length]
+
 
 
   const addTask = () => {
@@ -412,6 +433,16 @@ export default function JarvisDashboard() {
               <div style={{ fontSize: 9, color: UP, marginTop: 2 }}>▸ {doNow.tip}</div>
             </div>
           </div>
+
+          {/* Live energy read-out */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, border: `1px solid ${CYAN_DIM}`, borderRadius: 6, padding: '5px 8px' }}>
+            <span style={{ fontSize: 8, color: CYAN_SOFT, letterSpacing: 1 }}>ENERGY NOW</span>
+            <span style={{ fontSize: 11, color: energy.color, textShadow: `0 0 6px ${energy.color}`, fontWeight: 700 }}>{energy.level}</span>
+            <div style={{ flex: 1, height: 5, background: CYAN_DIM, borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: `${energy.pct}%`, height: '100%', background: energy.color, boxShadow: `0 0 6px ${energy.color}`, transition: 'width 0.6s' }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 9, color: CYAN_DIM, marginTop: 4 }}>▸ {energy.note}</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             <button onClick={() => setRunning(r => !r)} style={btn}>{running ? 'PAUSE' : 'START'} FOCUS</button>
             <button onClick={() => setTimer(1500)} style={btn}>RESET</button>
@@ -427,8 +458,11 @@ export default function JarvisDashboard() {
                   borderBottom: i < dayPlan.length - 1 ? `1px solid ${CYAN_DIM}` : 'none' }}>
                   <div style={{ width: 40, fontSize: 10, color: active ? CYAN : CYAN_DIM, flexShrink: 0 }}>{b.t}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, color: active ? CYAN : CYAN_SOFT, textShadow: active ? `0 0 6px ${CYAN}` : 'none' }}>
-                      {active && '▸ '}{b.label}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                      <div style={{ fontSize: 10, color: active ? CYAN : CYAN_SOFT, textShadow: active ? `0 0 6px ${CYAN}` : 'none' }}>
+                        {active && '▸ '}{b.label}
+                      </div>
+                      <div style={{ fontSize: 7, color: CYAN_DIM, letterSpacing: 1, whiteSpace: 'nowrap', alignSelf: 'center' }}>{b.ph}</div>
                     </div>
                     <div style={{ fontSize: 8, color: CYAN_DIM }}>{b.tip}</div>
                   </div>
@@ -451,7 +485,7 @@ export default function JarvisDashboard() {
 
         {/* storage + energy compact row */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Gauge size={78} value={100} label="ENERGY" sub="%" />
+          <Gauge size={78} value={energy.pct} label="ENERGY" sub="%" color={energy.color} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 3, color: CYAN_SOFT, textShadow: `0 0 8px ${CYAN}` }}>
               EXPO<span style={{ color: CYAN }}> 2010</span>
