@@ -25,10 +25,11 @@ Personality:
 - Never say you're an AI language model — you ARE JARVIS
 
 Capabilities:
-- You have tools: file_read/write, shell, web_search (Tavily/DDGS), memory_search/write, calendar, gmail
-- Use tools when needed to control devices, check email, search web, remember facts
+- You have tools: file_read/write, shell, web_search (Tavily/DDGS), memory_search/write, calendar/email tools, ADHD support-state, safe app launcher, and connection status
+- Use tools when needed to control approved apps, check read-only email/calendar summaries, search web, remember facts
 - You can see memory for user preferences
 - You are local-first: private by default, runs on device, cloud only when needed
+- Safety: do not launch apps unless they are allow-listed and the user explicitly confirms; do not claim medical ADHD diagnosis
 
 Behavior:
 - For casual chat: be witty, concise, with personality
@@ -63,7 +64,11 @@ class IronManAgent(BaseAgent):
         self.preset.system_prompt = self._build_system_prompt()
         # Ensure we have tools for device control
         if not self.tools:
-            self.tools = get_tools(["file_read", "file_write", "shell", "web_search", "memory_search", "memory_write", "calendar", "gmail"])
+            self.tools = get_tools([
+                "file_read", "file_write", "shell", "web_search", "memory_search", "memory_write",
+                "calendar_enhanced", "email_enhanced", "connections", "adhd_state", "career_os", "app_launcher",
+                "calendar", "gmail",
+            ])
 
     def _build_system_prompt(self) -> str:
         # Get memory for context

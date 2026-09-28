@@ -9,7 +9,7 @@ JARVIS is now **3 systems in 1**:
 2. **ADHD Co-Pilot** — 16 tools for executive dysfunction, time blindness, overwhelm
 3. **Local-First Personal AI** — 9 engines, FAISS memory, Tavily/DDGS search, voice, vision, device control
 
-**94 files, 26 tools, 11 agents, 3 frontend modes, autostart, greeting, task alignment.**
+**94 files, 61 registered tools, 11 agents, 3 frontend modes, autostart, greeting, task alignment.**
 
 ---
 
@@ -247,8 +247,8 @@ Advanced 6:
 **Search:**
 - search_tools.py: Tavily (needs TAVILY_API_KEY), DDGS (free via ddgs), Hybrid (Tavily→DDGS→mock)
 
-**Tools (26 total):**
-- file_read/write, shell/code_exec, web_search/tavily_search/ddgs_search, memory_search/write, calendar/gmail (mock), lights/music/system/project (device), vision (Ollama llava offline + OpenAI vision + camera), wakeword (openWakeWord + energy fallback), 16 ADHD, 3 startup (autostart, greeting, task_alignment)
+**Tools (61 registered total):**
+- file_read/write, shell/code_exec, web_search/tavily_search/ddgs_search, memory_search/write, calendar/gmail (mock), calendar_enhanced/email_enhanced, Google connection status/OAuth setup, JAUTOMATIC Career OS integration, safe app_launcher, ADHD support-state assessment, lights/music/system/project (device), vision (Ollama llava offline + OpenAI vision + camera), wakeword (openWakeWord + energy fallback), 16 ADHD, 3 startup (autostart, greeting, task_alignment)
 
 **Agents (11):**
 - simple, native_react (Thought-Action-Observation), orchestrator (multi-turn), morning_digest (briefing + TTS), deep_research (multi-hop citations), code_assistant (file/shell), ironman (witty Sir + device + easter eggs), adhd_coach (16 tools), plus aliases: jarvis, iron_man, adhd, coach, focus, etc.
@@ -297,7 +297,7 @@ Advanced 6:
 
 **Local-First:**
 - [x] 9 engines, FAISS memory, hybrid search, MSI workflows (but not building MSI yet as requested)
-- [x] 94 files, 26 tools, 11 agents
+- [x] 94 files, 61 registered tools, 11 agents
 
 ---
 
@@ -416,7 +416,7 @@ npm run dev
 - `src/jarvis/speech/voice_io.py` — Voice I/O
 - etc.
 
-**Total: 94+ files, 26 tools, 11 agents, 3 frontend modes, autostart, greeting, task alignment, Iron Man HUD movie-accurate.**
+**Total: 94+ files, 61 registered tools, 11 agents, 3 frontend modes, autostart, greeting, task alignment, Iron Man HUD movie-accurate.**
 
 ---
 

@@ -20,6 +20,7 @@ dependencies = [
     "websockets>=12.0",
     "python-multipart>=0.0.9",
     "tomlkit>=0.12",
+    "tomli>=2.0; python_version<'3.11'",
 ]
 
 [project.optional-dependencies]
@@ -57,6 +58,18 @@ tools-search = [
     "tavily-python>=0.3",
     "ddgs>=9.11.4",
 ]
+google = [
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.140",
+    "google-auth>=2.30",
+]
+windows = [
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.140",
+    "google-auth>=2.30",
+    "pyinstaller>=6.0",
+    "pywebview>=5.0,<6",
+]
 voice = [
     "faster-whisper>=1.0",
     "sounddevice>=0.5",
@@ -74,11 +87,14 @@ all = [
     "tavily-python>=0.3",
     "ddgs>=9.11.4",
     "litellm==1.100.1",
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.140",
+    "google-auth>=2.30",
 ]
 
 [project.scripts]
 jarvis = "jarvis.cli.main:cli"
-jarvis-desktop = "app:main"
+jarvis-desktop = "jarvis.cli.desktop_gui:main"
 jarvis-server = "jarvis.server.api:serve_cli"
 jarvis-hud-companion = "jarvis.startup.hud_companion:main"
 jarvis-windows = "jarvis.startup.windows_boot:main"

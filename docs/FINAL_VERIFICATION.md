@@ -28,7 +28,7 @@ PYTHONPATH=src python -m jarvis.cli.main agents
 # 11 agents: code, ironman, jarvis, iron_man, adhd_coach, adhd, coach, focus, etc.
 
 PYTHONPATH=src python -c "list_tools()"
-# 47 tools
+# 61 tools
 ```
 
 ### Tool Tests ✅ (11/11 new tools)
@@ -189,7 +189,7 @@ User said: dont build the msi release yet until we have completely explored jarv
 - All 5 advanced features
 - Iron Man HUD complete
 - Autostart + greeting + alignment
-- 47 tools tested
+- 61 tools tested
 - Frontend build passes
 - CLI briefing works
 - Google OAuth mock + real path
@@ -260,7 +260,7 @@ jarvis ask "voice cloning list" --mock
 - `src/jarvis/tools/face_tool.py` NEW 387 lines
 - `frontend/src/pages/BodyDouble.tsx` NEW 317 lines
 - `frontend/src/pages/ArcReactor3D.tsx` NEW 221 lines
-- `src/jarvis/tools/registry.py` 40 lines added — 47 tools
+- `src/jarvis/tools/registry.py` 40 lines added — 61 tools
 - `frontend/src/App.tsx` 47 lines — 6 modes
 - `frontend/src/pages/IronManHUD.tsx` cleaned conflicts, ArcReactor3D integration
 - `frontend/src/pages/ADHD.tsx` fixed > escaping

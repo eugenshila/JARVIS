@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from jarvis.agents.registry import get_agent, list_agents
-from jarvis.core.config import JarvisConfig
+from jarvis.core.config import JarvisConfig, get_home
 from jarvis.core.types import Message
 from jarvis.engine.registry import get_engine, list_engines
 from jarvis.memory.store import MemoryStore
@@ -73,6 +73,31 @@ class HudChatRequest(BaseModel):
     messages: list[HudMessage]
 
 
+class HudAdhdStateRequest(BaseModel):
+    energy: int = 5
+    focus: int = 5
+    stress: int = 5
+    sleep_hours: float = 7
+    mood: str = ""
+    medication: str = "unknown"
+    notes: str = ""
+
+
+class HudAppLaunchRequest(BaseModel):
+    app: str
+    confirm: bool = False
+
+
+class HudAppRegisterRequest(BaseModel):
+    name: str
+    path: str
+    allow_args: bool = False
+
+
+class HudCareerModeRequest(BaseModel):
+    mode: str
+
+
 def _ollama_request(path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
     request = urllib.request.Request(
@@ -100,6 +125,189 @@ async def hud_voice_status():
     status = await asyncio.to_thread(read_voice_status)
     status["voice_name"] = available_voice()
     return status
+
+
+def _safe_json(path: Path, default: Any) -> Any:
+    try:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return default
+
+
+def _connection_summary() -> dict[str, Any]:
+    home = get_home()
+    google_status: dict[str, Any] = {"credentials": False, "authenticated": False}
+    try:
+        from jarvis.connectors.google import GoogleConnector
+
+        google = GoogleConnector()
+        google_status = {
+            "credentials": google.is_configured(),
+            "authenticated": google.is_authenticated(),
+            "credentials_path": str(google.creds_path),
+            "token_path": str(google.token_path),
+        }
+    except Exception as exc:
+        google_status = {"credentials": False, "authenticated": False, "error": str(exc)}
+    return {
+        "google": google_status,
+        "microsoft": {"implemented": False, "instructions": "Use Microsoft Graph OAuth guidance from `jarvis connect microsoft --instructions`."},
+        "local": {
+            "calendar_path": str(home / "calendar.json"),
+            "calendar_exists": (home / "calendar.json").exists(),
+            "email_path": str(home / "emails.json"),
+            "email_exists": (home / "emails.json").exists(),
+        },
+        "policy": "Read-only by default; sending mail or changing events requires explicit confirmation.",
+    }
+
+
+def _adhd_latest() -> dict[str, Any]:
+    logs = _safe_json(get_home() / "adhd" / "state_log.json", [])
+    if isinstance(logs, list) and logs:
+        latest = logs[-1]
+        return {"configured": True, "latest": latest}
+    return {"configured": False, "latest": None}
+
+
+def _career_summary() -> dict[str, Any]:
+    try:
+        from jarvis.connectors.jautomatic import JAutomaticConnector
+        from jarvis.tools.career_tools import _load_career_config
+
+        connector = JAutomaticConnector()
+        stats = connector.stats()
+        return {"mode": _load_career_config().get("mode", "seeking"), "stats": stats}
+    except Exception as exc:
+        return {"mode": "seeking", "stats": {}, "error": str(exc)}
+
+
+@app.get("/hud/preflight")
+async def hud_preflight():
+    """Pre-MSI readiness checks surfaced in the HUD."""
+    try:
+        from jarvis.tools.app_launcher import AppLauncherTool
+
+        apps = AppLauncherTool().load_apps()
+    except Exception:
+        apps = []
+    return {
+        "adhd": _adhd_latest(),
+        "connections": _connection_summary(),
+        "career": _career_summary(),
+        "apps": {"count": len(apps), "names": [a.get("name") for a in apps], "items": apps},
+    }
+
+
+@app.post("/hud/adhd-state")
+async def hud_adhd_state(req: HudAdhdStateRequest):
+    try:
+        from jarvis.tools.adhd_state import ADHDStateTool
+
+        result = await asyncio.to_thread(
+            ADHDStateTool().run,
+            action="assess",
+            energy=req.energy,
+            focus=req.focus,
+            stress=req.stress,
+            sleep_hours=req.sleep_hours,
+            mood=req.mood,
+            medication=req.medication,
+            notes=req.notes,
+        )
+        return {"content": result, "adhd": _adhd_latest()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/hud/connections")
+async def hud_connections():
+    return _connection_summary()
+
+
+@app.post("/hud/connections/google/setup")
+async def hud_google_setup():
+    try:
+        from jarvis.tools.connection_tools import ConnectionStatusTool
+
+        result = await asyncio.to_thread(ConnectionStatusTool().run, action="google_setup")
+        return {"content": result, "connections": _connection_summary()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/hud/apps")
+async def hud_apps():
+    try:
+        from jarvis.tools.app_launcher import AppLauncherTool
+
+        apps = await asyncio.to_thread(AppLauncherTool().load_apps)
+        return {"count": len(apps), "items": apps}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/apps")
+async def hud_add_app(req: HudAppRegisterRequest):
+    try:
+        from jarvis.tools.app_launcher import AppLauncherTool
+
+        result = await asyncio.to_thread(AppLauncherTool().run, action="add", name=req.name, path=req.path, allow_args=req.allow_args)
+        apps = AppLauncherTool().load_apps()
+        return {"content": result, "apps": apps}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/apps/launch")
+async def hud_launch_app(req: HudAppLaunchRequest):
+    try:
+        from jarvis.tools.app_launcher import AppLauncherTool
+
+        result = await asyncio.to_thread(AppLauncherTool().run, action="launch", app=req.app, confirm=req.confirm)
+        return {"content": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/hud/career")
+async def hud_career():
+    return _career_summary()
+
+
+@app.get("/hud/career/today")
+async def hud_career_today():
+    try:
+        from jarvis.tools.career_tools import CareerTool
+
+        result = await asyncio.to_thread(CareerTool().run, action="today")
+        return {"content": result, "career": _career_summary()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/career/mode")
+async def hud_career_mode(req: HudCareerModeRequest):
+    try:
+        from jarvis.tools.career_tools import CareerTool
+
+        result = await asyncio.to_thread(CareerTool().run, action="mode", mode=req.mode)
+        return {"content": result, "career": _career_summary()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/hud/career/open")
+async def hud_career_open(req: HudAppLaunchRequest):
+    try:
+        from jarvis.tools.career_tools import CareerTool
+
+        result = await asyncio.to_thread(CareerTool().run, action="open", confirm=req.confirm)
+        return {"content": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/hud/chat")

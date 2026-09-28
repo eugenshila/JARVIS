@@ -127,7 +127,17 @@ jarvis capture "idea: app for ADHD time blindness" --tag idea
 
 No organizing needed. Just capture. Organize later via brain dump.
 
-### 6. ⚡ Energy Check → Task Matching
+### 6. ⚡ Daily Support-State Check → Task Matching
+JARVIS does **not** diagnose your ADHD or assign a medical severity level. It asks for a short daily state check and converts it into an operating mode: Low Battery, Wired but Tired, Buzzing / Restless, Hyperfocus Risk, Scattered Guardrails, Overwhelm SOS, or Steady.
+
+```bash
+jarvis adhd-state --energy 5 --focus 6 --stress 4 --sleep-hours 7 --mood calm
+jarvis adhd-state --status
+```
+
+This creates a support load for planning, focus timers, and guardrails — not a clinical score.
+
+### 7. ⚡ Energy Check → Task Matching
 Don't do hard tasks on low battery.
 
 ```bash
@@ -148,7 +158,7 @@ Includes Dopamine Menu (2-5 min):
 - 🧹 Tidy one surface
 - 💬 Text someone kind
 
-### 7. 🏆 Win Tracker — Dopamine Hits
+### 8. 🏆 Win Tracker — Dopamine Hits
 ADHD brain forgets wins, remembers failures. This log is truth.
 
 ```bash
@@ -164,7 +174,7 @@ Tiny wins count:
 
 Celebrations + streaks. Progress, not perfection.
 
-### 8. 🆘 Overwhelm SOS
+### 9. 🆘 Overwhelm SOS
 When frozen, panicked, too much.
 
 ```bash
@@ -178,7 +188,7 @@ Flow:
 
 No judgment. Only one next step.
 
-### 9. ⏱️ Time Blindness Antidote
+### 10. ⏱️ Time Blindness Antidote
 ADHD underestimates time by 40-200%. Normal, not failure.
 
 ```bash
@@ -201,7 +211,7 @@ Make it real:
 
 Rule: Double first guess + 10 min buffer — usually close.
 
-### 10. 📊 Distraction Log — Data, Not Failure
+### 11. 📊 Distraction Log — Data, Not Failure
 Log distractions to find patterns, fix environment not you.
 
 ```bash
