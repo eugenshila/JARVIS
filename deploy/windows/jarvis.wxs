@@ -15,6 +15,7 @@
       <ComponentRef Id="ConfigExample" />
       <ComponentRef Id="PathEnv" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="AutoStart" />
     </Feature>
 
     <UIRef Id="WixUI_InstallDir" />
@@ -68,6 +69,14 @@
     </DirectoryRef>
 
     <DirectoryRef Id="TARGETDIR">
+      <Component Id="AutoStart" Guid="*">
+        <RegistryValue Root="HKLM"
+                       Key="Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+                       Name="JARVIS SHILATECH"
+                       Type="string"
+                       Value="&quot;[INSTALLFOLDER]jarvis.exe&quot;"
+                       KeyPath="yes" />
+      </Component>
       <Component Id="PathEnv" Guid="*">
         <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no"
                      Part="last" Action="set" System="yes" />
