@@ -477,7 +477,7 @@ export default function JarvisDashboard() {
       ))}
 
       {/* ===== LEFT COLUMN: storage, energy, ADHD co-pilot ===== */}
-      <div style={{ position: 'absolute', top: '22%', left: '2%', width: 300, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ position: 'absolute', top: '22%', left: '2%', bottom: '3%', width: 300, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
         {/* ADHD co-pilot — day planning, runs inside the system */}
         <Panel title="ADHD CO-PILOT · PLAN MY DAY" right={<span style={{ fontSize: 8, color: UP, letterSpacing: 1 }}>● RUNNING</span>}>
           {/* focus timer + do-now */}
