@@ -4,14 +4,14 @@
 
 ### Windows MSI
 
-Download `JARVIS-HUD-0.2.0-x64.msi` from the **Build JARVIS Ollama HUD MSI**
-GitHub Actions artifact. The installer includes the local API, circular HUD,
-and clap companion in one Windows application. It adds Start Menu and
-start-after-sign-in shortcuts; uninstalling the MSI removes both shortcuts.
+Download `JARVIS-0.2.0-x64.msi` from the **Windows JARVIS MSI** GitHub Actions
+artifact. This is the repository's single canonical Windows package. It includes
+the local API and the same React dashboard used by development and GitHub Pages,
+plus Start Menu shortcuts and a portable ZIP. The MSI deliberately does not add
+an automatic-startup entry. Source-checkout users can opt in with the provided
+`ENABLE-HUD-STARTUP.bat` helper after reviewing it.
 Ollama is a separate local prerequisite: install it and run
-`ollama pull qwen2.5:3b`. The HUD reports when Ollama or the model is missing.
-The MSI is a Windows build; the repository's older MSI workflows package a
-different desktop interface.
+`ollama pull qwen2.5:3b`. The dashboard reports when Ollama or the model is missing.
 
 The circular cyan HUD opens by default in the React interface. Its chat uses
 **`qwen2.5:3b` through Ollama on your computer**. The status badge checks that

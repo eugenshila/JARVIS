@@ -11,8 +11,8 @@ import { useState, useEffect, useRef } from 'react'
 */
 
 const CYAN = '#22d3ee'
-const CYAN_SOFT = 'rgba(34,211,238,0.55)'
-const CYAN_DIM = 'rgba(34,211,238,0.25)'
+const CYAN_SOFT = 'rgba(125,226,245,0.82)'
+const CYAN_DIM = 'rgba(83,196,218,0.52)'
 const UP = '#34d399'
 const DOWN = '#f87171'
 
@@ -194,13 +194,13 @@ function Panel({ title, right, children, style }:
   { title?: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div style={{
-      border: `1px solid ${CYAN_DIM}`, borderRadius: 10, padding: 12,
-      background: 'rgba(6,16,22,0.55)', backdropFilter: 'blur(4px)',
+      border: `1px solid ${CYAN_DIM}`, borderRadius: 12, padding: 15,
+      background: 'rgba(4,14,20,0.82)', backdropFilter: 'blur(7px)',
       boxShadow: 'inset 0 0 24px rgba(34,211,238,0.06)', ...style,
     }}>
       {title && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT }}>{title}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontSize: 12, letterSpacing: 2, color: CYAN_SOFT }}>{title}</div>
           {right}
         </div>
       )}
@@ -280,7 +280,19 @@ export default function JarvisDashboard() {
 
   // reactor size responsive
   useEffect(() => {
-    const fit = () => setReactor(Math.round(Math.min(820, window.innerWidth * 0.52, window.innerHeight * 0.88)))
+    const fit = () => {
+      // Keep the reactor clear of both information columns at the desktop
+      // launcher's supported minimum size (1100×700) and at Windows scaling.
+      const width = window.innerWidth
+      const compact = width <= 1250 || window.innerHeight <= 760
+      const leftWidth = compact ? 280 : Math.min(370, Math.max(320, width * 0.20))
+      const rightWidth = compact ? 260 : Math.min(330, Math.max(286, width * 0.18))
+      const edge = width * 0.02
+      const leftRoom = 2 * (width / 2 - edge - leftWidth - 8)
+      const rightRoom = 2 * (width / 2 - edge - rightWidth - 8)
+      const horizontalRoom = Math.max(360, Math.min(leftRoom, rightRoom))
+      setReactor(Math.round(Math.min(820, width * 0.52, window.innerHeight * 0.88, horizontalRoom)))
+    }
     fit()
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)
@@ -430,17 +442,17 @@ export default function JarvisDashboard() {
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT }}>{weekday.toUpperCase()}</div>
+            <div style={{ fontSize: 12, letterSpacing: 2, color: CYAN_SOFT }}>{weekday.toUpperCase()}</div>
             <div style={{ fontSize: 36, fontWeight: 700, lineHeight: 1, textShadow: `0 0 10px ${CYAN}` }}>{dayNum}</div>
-            <div style={{ fontSize: 10, letterSpacing: 2, color: CYAN_SOFT }}>{monthName.toUpperCase()}</div>
+            <div style={{ fontSize: 12, letterSpacing: 2, color: CYAN_SOFT }}>{monthName.toUpperCase()}</div>
           </div>
         </div>
         <div>
           <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: 3, textShadow: `0 0 10px ${CYAN}` }}>
             {hh}:{mm}<span style={{ fontSize: 14, color: CYAN_SOFT }}>:{ss}</span>
           </div>
-          <div style={{ fontSize: 9, letterSpacing: 2, color: CYAN_SOFT, marginTop: 4 }}>LOCAL SYSTEM TIME</div>
-          <div style={{ fontSize: 9, letterSpacing: 2, color: CYAN_DIM }}>J.A.R.V.I.S · MARK XLII</div>
+          <div style={{ fontSize: 11, letterSpacing: 2, color: CYAN_SOFT, marginTop: 4 }}>LOCAL SYSTEM TIME</div>
+          <div style={{ fontSize: 11, letterSpacing: 2, color: CYAN_DIM }}>J.A.R.V.I.S · MARK XLII</div>
         </div>
       </div>
 
@@ -454,32 +466,32 @@ export default function JarvisDashboard() {
 
       {/* ===== TOP-RIGHT: header + city ===== */}
       <div style={{ position: 'absolute', top: '3%', right: '2%', textAlign: 'right' }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, color: CYAN_SOFT }}>{now.toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit' })}</div>
+        <div style={{ fontSize: 13, letterSpacing: 1, color: CYAN_SOFT }}>{now.toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit' })}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <WxIcon kind="moon" s={24} />
           <div>
             <div style={{ fontSize: 20, fontWeight: 700, textShadow: `0 0 8px ${CYAN}` }}>13°</div>
-            <div style={{ fontSize: 9, letterSpacing: 1, color: CYAN_SOFT }}>NAIROBI · CLEAR</div>
+            <div style={{ fontSize: 11, letterSpacing: 1, color: CYAN_SOFT }}>NAIROBI · CLEAR</div>
           </div>
         </div>
       </div>
 
       {/* ===== CENTER: big arc reactor ===== */}
-      <div style={{ position: 'absolute', top: '52%', left: '50%', transform: 'translate(-50%,-50%)' }}>
+      <div className="dashboard-reactor" style={{ position: 'absolute', top: '52%', left: '50%', transform: 'translate(-50%,-50%)' }}>
         <ArcReactor size={reactor} />
       </div>
       {[
         { t: '42%', l: '31%', txt: 'NEURAL LINK' }, { t: '38%', l: '69%', txt: 'REPULSOR' },
         { t: '66%', l: '32%', txt: 'DIAGNOSTIC' }, { t: '68%', l: '68%', txt: 'STARK IND.' },
       ].map((p, i) => (
-        <div key={i} style={{ position: 'absolute', top: p.t, left: p.l, fontSize: 9, letterSpacing: 2,
+        <div key={i} style={{ position: 'absolute', top: p.t, left: p.l, fontSize: 11, letterSpacing: 2,
           color: CYAN_DIM, transform: 'translate(-50%,-50%)', pointerEvents: 'none' }}>{p.txt}</div>
       ))}
 
       {/* ===== LEFT COLUMN: storage, energy, ADHD co-pilot ===== */}
-      <div style={{ position: 'absolute', top: '22%', left: '2%', bottom: '3%', width: 300, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
+      <div className="dashboard-column dashboard-column-left" style={{ position: 'absolute', top: '22%', left: '2%', bottom: '3%', width: 'clamp(320px, 20vw, 370px)', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
         {/* ADHD co-pilot — day planning, runs inside the system */}
-        <Panel title="ADHD CO-PILOT · PLAN MY DAY" right={<span style={{ fontSize: 8, color: UP, letterSpacing: 1 }}>● RUNNING</span>}>
+        <Panel title="ADHD CO-PILOT · PLAN MY DAY" right={<span style={{ fontSize: 10, color: UP, letterSpacing: 1 }}>● RUNNING</span>}>
           {/* focus timer + do-now */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <div style={{ position: 'relative', width: 74, height: 74, flexShrink: 0 }}>
@@ -491,47 +503,47 @@ export default function JarvisDashboard() {
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>{tMin}:{tSec}</div>
-                <div style={{ fontSize: 7, letterSpacing: 1, color: CYAN_SOFT }}>FOCUS</div>
+                <div style={{ fontSize: 9, letterSpacing: 1, color: CYAN_SOFT }}>FOCUS</div>
               </div>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1 }}>DO NOW · {doNow.t}</div>
-              <div style={{ fontSize: 11, color: CYAN, lineHeight: 1.4, marginTop: 2 }}>{doNow.label}</div>
-              <div style={{ fontSize: 9, color: UP, marginTop: 2 }}>▸ {doNow.tip}</div>
+              <div style={{ fontSize: 11, color: CYAN_SOFT, letterSpacing: 1 }}>DO NOW · {doNow.t}</div>
+              <div style={{ fontSize: 13, color: CYAN, lineHeight: 1.4, marginTop: 2 }}>{doNow.label}</div>
+              <div style={{ fontSize: 11, color: UP, marginTop: 2 }}>▸ {doNow.tip}</div>
             </div>
           </div>
 
           {/* Live energy read-out */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, border: `1px solid ${CYAN_DIM}`, borderRadius: 6, padding: '5px 8px' }}>
-            <span style={{ fontSize: 8, color: CYAN_SOFT, letterSpacing: 1 }}>ENERGY NOW</span>
-            <span style={{ fontSize: 11, color: energy.color, textShadow: `0 0 6px ${energy.color}`, fontWeight: 700 }}>{energy.level}</span>
+            <span style={{ fontSize: 10, color: CYAN_SOFT, letterSpacing: 1 }}>ENERGY NOW</span>
+            <span style={{ fontSize: 13, color: energy.color, textShadow: `0 0 6px ${energy.color}`, fontWeight: 700 }}>{energy.level}</span>
             <div style={{ flex: 1, height: 5, background: CYAN_DIM, borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ width: `${energy.pct}%`, height: '100%', background: energy.color, boxShadow: `0 0 6px ${energy.color}`, transition: 'width 0.6s' }} />
             </div>
           </div>
-          <div style={{ fontSize: 9, color: CYAN_DIM, marginTop: 4 }}>▸ {energy.note}</div>
+          <div style={{ fontSize: 11, color: CYAN_DIM, marginTop: 4 }}>▸ {energy.note}</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             <button onClick={() => setRunning(r => !r)} style={btn}>{running ? 'PAUSE' : 'START'} FOCUS</button>
             <button onClick={() => setTimer(1500)} style={btn}>RESET</button>
           </div>
 
           {/* Today's plan (time blocks) */}
-          <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, margin: '10px 0 4px' }}>HOW TO PLAN YOUR DAY</div>
+          <div style={{ fontSize: 11, color: CYAN_SOFT, letterSpacing: 1, margin: '10px 0 4px' }}>HOW TO PLAN YOUR DAY</div>
           <div style={{ maxHeight: 148, overflowY: 'auto', paddingRight: 4 }}>
             {dayPlan.map((b, i) => {
               const active = b.t === doNow.t
               return (
                 <div key={i} style={{ display: 'flex', gap: 8, padding: '4px 0',
                   borderBottom: i < dayPlan.length - 1 ? `1px solid ${CYAN_DIM}` : 'none' }}>
-                  <div style={{ width: 40, fontSize: 10, color: active ? CYAN : CYAN_DIM, flexShrink: 0 }}>{b.t}</div>
+                  <div style={{ width: 40, fontSize: 12, color: active ? CYAN : CYAN_DIM, flexShrink: 0 }}>{b.t}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                      <div style={{ fontSize: 10, color: active ? CYAN : CYAN_SOFT, textShadow: active ? `0 0 6px ${CYAN}` : 'none' }}>
+                      <div style={{ fontSize: 12, color: active ? CYAN : CYAN_SOFT, textShadow: active ? `0 0 6px ${CYAN}` : 'none' }}>
                         {active && '▸ '}{b.label}
                       </div>
-                      <div style={{ fontSize: 7, color: CYAN_DIM, letterSpacing: 1, whiteSpace: 'nowrap', alignSelf: 'center' }}>{b.ph}</div>
+                      <div style={{ fontSize: 9, color: CYAN_DIM, letterSpacing: 1, whiteSpace: 'nowrap', alignSelf: 'center' }}>{b.ph}</div>
                     </div>
-                    <div style={{ fontSize: 8, color: CYAN_DIM }}>{b.tip}</div>
+                    <div style={{ fontSize: 10, color: CYAN_DIM }}>{b.tip}</div>
                   </div>
                 </div>
               )
@@ -540,11 +552,11 @@ export default function JarvisDashboard() {
 
           {/* Improve-your-day tip */}
           <div style={{ marginTop: 8, border: `1px solid ${CYAN_DIM}`, borderRadius: 6, padding: '6px 8px', background: 'rgba(34,211,238,0.06)' }}>
-            <div style={{ fontSize: 8, color: CYAN_SOFT, letterSpacing: 1 }}>IMPROVE YOUR DAY</div>
-            <div style={{ fontSize: 10, color: CYAN, marginTop: 2 }}>💡 {tipOfNow}</div>
+            <div style={{ fontSize: 10, color: CYAN_SOFT, letterSpacing: 1 }}>IMPROVE YOUR DAY</div>
+            <div style={{ fontSize: 12, color: CYAN, marginTop: 2 }}>💡 {tipOfNow}</div>
           </div>
 
-          <div style={{ fontSize: 9, color: CYAN_DIM, marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 11, color: CYAN_DIM, marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
             <span>MITs left: <span style={{ color: CYAN }}>{mits.length}</span></span>
             <span>Wins today: <span style={{ color: UP }}>{wins}</span></span>
           </div>
@@ -557,64 +569,64 @@ export default function JarvisDashboard() {
             <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 3, color: CYAN_SOFT, textShadow: `0 0 8px ${CYAN}` }}>
               EXPO<span style={{ color: CYAN }}> 2010</span>
             </div>
-            <div style={{ fontSize: 9, color: CYAN_DIM, lineHeight: 1.6, marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: CYAN_DIM, lineHeight: 1.6, marginTop: 4 }}>
               <div>Storage 98 / 100 GB</div><div>Reactor online · 284 K</div><div>Output 3.2 GJ/s · stable</div>
             </div>
           </div>
         </div>
 
         {/* CAREER OS + INCOME OS — glance card, reads the local JARVIS API */}
-        <Panel title="CAREER + INCOME OS" right={<span style={{ fontSize: 8, color: CYAN_SOFT, letterSpacing: 1 }}>{(career?.mode || 'seeking').toUpperCase()}</span>}>
-          <div style={{ fontSize: 9, color: '#f59e0b', letterSpacing: 0.5, marginBottom: 6 }}>⚠ Research &amp; tracking only — not financial advice</div>
-          <div style={{ fontSize: 10, color: CYAN_DIM, marginBottom: 4, letterSpacing: 1 }}>CAREER · JAUTOMATIC</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+        <Panel title="CAREER + INCOME OS" right={<span style={{ fontSize: 10, color: CYAN_SOFT, letterSpacing: 1 }}>{(career?.mode || 'seeking').toUpperCase()}</span>}>
+          <div style={{ fontSize: 11, color: '#f59e0b', letterSpacing: 0.5, marginBottom: 6 }}>⚠ Research &amp; tracking only — not financial advice</div>
+          <div style={{ fontSize: 12, color: CYAN_DIM, marginBottom: 4, letterSpacing: 1 }}>CAREER · JAUTOMATIC</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
             <span>Applications tracked</span><span style={{ color: CYAN }}>{career?.stats?.applications ?? 0}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
             <span>Follow-ups due</span>
             <span style={{ color: (career?.stats?.follow_ups_due || 0) ? '#f59e0b' : UP }}>{career?.stats?.follow_ups_due ?? 0}</span>
           </div>
-          <div style={{ fontSize: 10, color: CYAN_DIM, margin: '8px 0 4px', letterSpacing: 1 }}>INCOME OS</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+          <div style={{ fontSize: 12, color: CYAN_DIM, margin: '8px 0 4px', letterSpacing: 1 }}>INCOME OS</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
             <span>Opportunities awaiting review</span><span style={{ color: CYAN }}>{income?.opportunities?.awaiting_review ?? 0} / {income?.opportunities?.count ?? 0}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
             <span>Watchlist</span><span style={{ color: CYAN }}>{income?.watchlist?.count ?? 0} symbols</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
             <span>Portfolio (user-entered)</span><span style={{ color: CYAN }}>{income?.portfolio?.count ?? 0} holdings</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '2px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
             <span>Active income projects</span><span style={{ color: CYAN }}>{income?.projects?.active ?? 0}</span>
           </div>
-          <div style={{ fontSize: 8, color: CYAN_DIM, marginTop: 6 }}>Watchlist/portfolio are entries you make — nothing here trades or connects to a brokerage.</div>
+          <div style={{ fontSize: 10, color: CYAN_DIM, marginTop: 6 }}>Watchlist/portfolio are entries you make — nothing here trades or connects to a brokerage.</div>
         </Panel>
       </div>
 
       {/* ===== RIGHT COLUMN: weather, tasks, stocks ===== */}
-      <div style={{ position: 'absolute', top: '15%', right: '2%', bottom: '3%', width: 256, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
+      <div className="dashboard-column dashboard-column-right" style={{ position: 'absolute', top: '15%', right: '2%', bottom: '3%', width: 'clamp(286px, 18vw, 330px)', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
         <Panel title="5-DAY FORECAST · NAIROBI">
           {FORECAST.map((f, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0',
               borderBottom: i < FORECAST.length - 1 ? `1px solid ${CYAN_DIM}` : 'none' }}>
-              <div style={{ width: 44, fontSize: 10, letterSpacing: 1, color: CYAN_SOFT }}>{f.day}</div>
+              <div style={{ width: 44, fontSize: 12, letterSpacing: 1, color: CYAN_SOFT }}>{f.day}</div>
               <WxIcon kind={f.icon} s={20} />
-              <div style={{ flex: 1, fontSize: 10, color: CYAN_DIM }}>{f.desc}</div>
-              <div style={{ fontSize: 11, color: CYAN }}>{f.hi}°<span style={{ color: CYAN_DIM }}> / {f.lo}°</span></div>
+              <div style={{ flex: 1, fontSize: 12, color: CYAN_DIM }}>{f.desc}</div>
+              <div style={{ fontSize: 13, color: CYAN }}>{f.hi}°<span style={{ color: CYAN_DIM }}> / {f.lo}°</span></div>
             </div>
           ))}
         </Panel>
 
         {/* TASKS */}
-        <Panel title="TASKS" right={<span style={{ fontSize: 9, color: CYAN_SOFT }}>{tasks.filter(t => !t.done).length} OPEN</span>}>
+        <Panel title="TASKS" right={<span style={{ fontSize: 11, color: CYAN_SOFT }}>{tasks.filter(t => !t.done).length} OPEN</span>}>
           <div style={{ maxHeight: 118, overflowY: 'auto' }}>
             {tasks.map((t, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
                 <div onClick={() => setTasks(ts => ts.map((x, j) => j === i ? { ...x, done: !x.done } : x))}
                   style={{ width: 14, height: 14, borderRadius: 3, border: `1px solid ${t.done ? UP : CYAN_SOFT}`,
-                    background: t.done ? UP : 'transparent', color: '#01050a', fontSize: 10, lineHeight: '12px',
+                    background: t.done ? UP : 'transparent', color: '#01050a', fontSize: 12, lineHeight: '12px',
                     textAlign: 'center', cursor: 'pointer', flexShrink: 0 }}>{t.done ? '✓' : ''}</div>
-                <div style={{ flex: 1, fontSize: 11, color: t.done ? CYAN_DIM : CYAN,
+                <div style={{ flex: 1, fontSize: 13, color: t.done ? CYAN_DIM : CYAN,
                   textDecoration: t.done ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.text}</div>
                 <span onClick={() => setTasks(ts => ts.filter((_, j) => j !== i))}
                   style={{ fontSize: 12, color: CYAN_DIM, cursor: 'pointer' }}>×</span>
@@ -622,27 +634,27 @@ export default function JarvisDashboard() {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-            <input value={newTask} onChange={e => setNewTask(e.target.value)}
+            <input aria-label="Add a dashboard task" value={newTask} onChange={e => setNewTask(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Add task + Enter"
               style={{ flex: 1, background: 'rgba(2,8,12,0.8)', border: `1px solid ${CYAN_DIM}`, color: CYAN,
-                borderRadius: 6, padding: '6px 8px', fontSize: 10, fontFamily: 'inherit', outline: 'none' }} />
+                borderRadius: 8, padding: '9px 11px', minHeight: 38, fontSize: 13, lineHeight: 1.35, fontFamily: 'inherit', outline: 'none' }} />
             <button onClick={addTask} style={btn}>ADD</button>
           </div>
         </Panel>
 
         {/* STOCK MARKET */}
-        <Panel title="MARKET WATCH" right={<span style={{ fontSize: 8, color: UP, letterSpacing: 1 }}>● LIVE</span>}>
+        <Panel title="MARKET WATCH" right={<span style={{ fontSize: 10, color: UP, letterSpacing: 1 }}>● LIVE</span>}>
           {stocks.map((s, i) => {
             const chg = ((s.price - s.base) / s.base) * 100
             const up = chg >= 0
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
                 borderBottom: i < stocks.length - 1 ? `1px solid ${CYAN_DIM}` : 'none' }}>
-                <div style={{ width: 46, fontSize: 11, color: CYAN, letterSpacing: 1 }}>{s.sym}</div>
+                <div style={{ width: 46, fontSize: 13, color: CYAN, letterSpacing: 1 }}>{s.sym}</div>
                 <Sparkline data={s.hist} color={up ? UP : DOWN} w={58} h={20} />
                 <div style={{ flex: 1, textAlign: 'right' }}>
-                  <div style={{ fontSize: 11, color: CYAN }}>{s.price >= 1000 ? s.price.toLocaleString(undefined, { maximumFractionDigits: 0 }) : s.price.toFixed(2)}</div>
-                  <div style={{ fontSize: 9, color: up ? UP : DOWN }}>{up ? '▲' : '▼'} {Math.abs(chg).toFixed(2)}%</div>
+                  <div style={{ fontSize: 13, color: CYAN }}>{s.price >= 1000 ? s.price.toLocaleString(undefined, { maximumFractionDigits: 0 }) : s.price.toFixed(2)}</div>
+                  <div style={{ fontSize: 11, color: up ? UP : DOWN }}>{up ? '▲' : '▼'} {Math.abs(chg).toFixed(2)}%</div>
                 </div>
               </div>
             )
@@ -650,16 +662,16 @@ export default function JarvisDashboard() {
         </Panel>
 
         {/* COMMS (moved from bottom-left to right column) */}
-        <Panel title="COMMS · SAMPLE" right={<span style={{ fontSize: 9, color: DOWN }}>{INBOX.filter(m => m.unread).length} NEW</span>}>
-          <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, marginBottom: 4 }}>CALENDAR · TODAY</div>
+        <Panel title="COMMS · SAMPLE" right={<span style={{ fontSize: 11, color: DOWN }}>{INBOX.filter(m => m.unread).length} NEW</span>}>
+          <div style={{ fontSize: 11, color: CYAN_SOFT, letterSpacing: 1, marginBottom: 4 }}>CALENDAR · TODAY</div>
           {CALENDAR.map((c, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, fontSize: 10, color: CYAN, padding: '2px 0' }}>
+            <div key={i} style={{ display: 'flex', gap: 6, fontSize: 12, color: CYAN, padding: '2px 0' }}>
               <span style={{ color: CYAN_DIM }}>▸</span>{c}
             </div>
           ))}
-          <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, margin: '8px 0 4px' }}>INBOX</div>
+          <div style={{ fontSize: 11, color: CYAN_SOFT, letterSpacing: 1, margin: '8px 0 4px' }}>INBOX</div>
           {INBOX.map((m, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, fontSize: 10, padding: '2px 0', color: m.unread ? CYAN : CYAN_DIM }}>
+            <div key={i} style={{ display: 'flex', gap: 6, fontSize: 12, padding: '2px 0', color: m.unread ? CYAN : CYAN_DIM }}>
               <span style={{ color: m.unread ? DOWN : CYAN_DIM }}>{m.unread ? '●' : '○'}</span>
               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.from}: {m.subj}</span>
             </div>
@@ -668,17 +680,17 @@ export default function JarvisDashboard() {
       </div>
 
       {/* ===== BOTTOM-CENTER: JARVIS voice sample + spectrum ===== */}
-      <div style={{ position: 'absolute', bottom: '2.5%', left: '50%', transform: 'translateX(-50%)', width: '52%', maxWidth: 820 }}>
-        <Panel title="JARVIS VOICE · SAMPLE" right={<span style={{ fontSize: 8, color: speaking ? UP : CYAN_SOFT, letterSpacing: 1 }}>{speaking ? '● SPEAKING' : 'neural en-GB · MSI'}</span>}>
+      <div className="dashboard-voice-panel" style={{ position: 'absolute', bottom: '2.5%', left: '50%', transform: 'translateX(-50%)', width: 'min(52%, calc(100% - 650px))', minWidth: 430, maxWidth: 820 }}>
+        <Panel title="JARVIS VOICE · SAMPLE" right={<span style={{ fontSize: 10, color: speaking ? UP : CYAN_SOFT, letterSpacing: 1 }}>{speaking ? '● SPEAKING' : 'neural en-GB · MSI'}</span>}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
             {clips.map(c => (
               <button key={c.id} onClick={() => playClip(c.file, c.text)} style={btn}>▶ {c.label}</button>
             ))}
-            <input value={voiceText} onChange={e => setVoiceText(e.target.value)}
+            <input aria-label="Text for JARVIS to speak" value={voiceText} onChange={e => setVoiceText(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && speakBrowser(voiceText)}
               placeholder="Type for JARVIS to speak…"
               style={{ flex: 1, minWidth: 140, background: 'rgba(2,8,12,0.8)', border: `1px solid ${CYAN_DIM}`, color: CYAN,
-                borderRadius: 6, padding: '7px 10px', fontSize: 11, fontFamily: 'inherit', outline: 'none' }} />
+                borderRadius: 8, padding: '10px 12px', minHeight: 40, fontSize: 14, lineHeight: 1.35, fontFamily: 'inherit', outline: 'none' }} />
             <button onClick={() => speaking ? (window.speechSynthesis?.cancel(), audioRef.current?.pause(), setSpeaking(false)) : speakBrowser(voiceText)}
               style={{ ...btn, borderColor: speaking ? DOWN : CYAN_SOFT, color: speaking ? DOWN : CYAN }}>
               {speaking ? '■ STOP' : '▶ SPEAK'}
@@ -695,7 +707,7 @@ export default function JarvisDashboard() {
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '42%', background: CYAN, borderRadius: 2, boxShadow: `0 0 8px ${CYAN}` }} />
               <div style={{ position: 'absolute', left: '42%', top: -3, width: 10, height: 10, borderRadius: '50%', background: '#eafcff', boxShadow: `0 0 8px ${CYAN}` }} />
             </div>
-            <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1 }}>SAMPLE · en-GB</div>
+            <div style={{ fontSize: 11, color: CYAN_SOFT, letterSpacing: 1 }}>SAMPLE · en-GB</div>
           </div>
         </Panel>
       </div>
@@ -710,7 +722,17 @@ export default function JarvisDashboard() {
         .spin-rev { animation: spinRev 18s linear infinite; }
         .spin-fast { animation: spin 9s linear infinite; }
         .pulse-core { animation: pulseCore 2.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
-        ::-webkit-scrollbar { width: 5px; }
+        input::placeholder { color: rgba(125,226,245,0.62); opacity: 1; }
+        input:focus { border-color: #67e8f9 !important; box-shadow: 0 0 0 2px rgba(34,211,238,0.16), 0 0 14px rgba(34,211,238,0.12); }
+        @media (max-width: 1250px), (max-height: 760px) {
+          .dashboard-column-left { width: 280px !important; }
+          .dashboard-column-right { width: 260px !important; }
+          .dashboard-voice-panel { width: min(48%, calc(100% - 620px)) !important; min-width: 430px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .spin-slow, .spin-slow2, .spin-rev, .spin-fast, .pulse-core { animation: none !important; }
+        }
+        ::-webkit-scrollbar { width: 7px; }
         ::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.3); border-radius: 3px; }
       `}</style>
     </div>
@@ -719,6 +741,6 @@ export default function JarvisDashboard() {
 
 const btn: React.CSSProperties = {
   background: 'rgba(34,211,238,0.12)', border: `1px solid ${CYAN_SOFT}`, color: CYAN,
-  borderRadius: 6, padding: '6px 10px', fontSize: 9, letterSpacing: 1, cursor: 'pointer',
+  borderRadius: 6, padding: '6px 10px', fontSize: 11, letterSpacing: 1, cursor: 'pointer',
   fontFamily: 'inherit', whiteSpace: 'nowrap',
 }

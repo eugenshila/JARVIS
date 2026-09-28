@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from jarvis import __version__
 from jarvis.agents.registry import get_agent, list_agents
 from jarvis.core.config import JarvisConfig, get_home
 from jarvis.core.types import Message
@@ -29,7 +30,7 @@ from jarvis.telemetry.monitor import TelemetryStore
 from jarvis.voice import read_voice_status, available_voice
 
 
-app = FastAPI(title="JARVIS API", version="0.1.0", description="Personal AI, On Personal Devices")
+app = FastAPI(title="JARVIS API", version=__version__, description="Personal AI, On Personal Devices")
 
 app.add_middleware(
     CORSMiddleware,
@@ -505,7 +506,7 @@ async def hud_chat(req: HudChatRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "0.1.0", "time": time.time()}
+    return {"status": "ok", "version": __version__, "time": time.time()}
 
 
 @app.get("/v1/models")
@@ -672,7 +673,7 @@ def memory_stats():
 def root():
     return {
         "name": "JARVIS",
-        "version": "0.1.0",
+        "version": __version__,
         "description": "Personal AI, On Personal Devices",
         "docs": "/docs",
         "health": "/health",

@@ -140,7 +140,7 @@ PYTHONPATH=src python -c "list_tools()"
 **What user needs to download for MSI:**
 1. **Windows MSI** (what we're about to build):
    - No Python needed — EXE bundled
-   - Double-click JARVIS-0.1.0-x64.msi → installs to Program Files\JARVIS
+   - Double-click JARVIS-0.2.0-x64.msi → installs to Program Files\JARVIS
    - Adds to PATH, Start Menu shortcut, uninstaller
    - Run `jarvis` from anywhere or Start Menu
 
@@ -168,16 +168,16 @@ PYTHONPATH=src python -c "list_tools()"
 # 2. Clone and build
 git clone https://github.com/eugenshila/JARVIS
 cd JARVIS
-.\deploy\windows\build_msi.ps1 -Version 0.1.0
+.\deploy\windows\build_msi.ps1 -Version 0.2.0
 
 # Output:
 # dist/jarvis.exe (one-file)
-# dist/JARVIS-0.1.0-x64.msi (if WiX found)
-# dist/JARVIS-0.1.0-portable.zip
+# dist/JARVIS-0.2.0-x64.msi (if WiX found)
+# dist/JARVIS-0.2.0-portable.zip
 
 # 3. Install MSI
-# Double-click dist/JARVIS-0.1.0-x64.msi
-# Or: msiexec /i dist/JARVIS-0.1.0-x64.msi
+# Double-click dist/JARVIS-0.2.0-x64.msi
+# Or: msiexec /i dist/JARVIS-0.2.0-x64.msi
 
 # 4. Run
 jarvis briefing --name Eugene

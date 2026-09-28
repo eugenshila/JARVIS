@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jarvis"
-version = "0.1.0"
+version = "0.2.0"
 description = "JARVIS — Personal AI, On Personal Devices. Local-first modular assistant stack."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -100,7 +100,7 @@ jarvis-hud-companion = "jarvis.startup.hud_companion:main"
 jarvis-windows = "jarvis.startup.windows_boot:main"
 
 [project.urls]
-Homepage = "https://github.com/open-jarvis/OpenJarvis"
+Homepage = "https://github.com/eugenshila/JARVIS"
 Repository = "https://github.com/eugenshila/JARVIS"
 
 [tool.hatch.build.targets.wheel]
