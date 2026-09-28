@@ -218,6 +218,14 @@ const START_STOCKS: Stock[] = [
   { sym: 'BTC', price: 63120, base: 61000, hist: [] },
 ].map(s => ({ ...s, hist: Array.from({ length: 20 }, () => s.price * (1 + (Math.random() - 0.5) * 0.02)) }))
 
+// --- sample data for testing ------------------------------------------------
+const CALENDAR = ['10:00 · Q4 planning prep', '14:00 · Q4 planning meeting', '16:30 · Client call']
+const INBOX = [
+  { from: 'Client', subj: 'Need Q4 brief by Friday', unread: true },
+  { from: 'Team', subj: 'Project update — on track', unread: true },
+  { from: 'Newsletter', subj: 'Weekly digest', unread: false },
+]
+
 export default function JarvisDashboard() {
   const [now, setNow] = useState(new Date())
   const [sys, setSys] = useState({ cpu: 74, ram: 15, swap: 49 })
@@ -225,6 +233,11 @@ export default function JarvisDashboard() {
   const [running, setRunning] = useState(true)
   const [stocks, setStocks] = useState<Stock[]>(START_STOCKS)
   const [reactor, setReactor] = useState(520)
+
+  // voice sample state
+  const [speaking, setSpeaking] = useState(false)
+  const [voiceText, setVoiceText] = useState('Good morning, sir. All systems nominal.')
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   // tasks
   const [tasks, setTasks] = useState<{ text: string; done: boolean }[]>(() => {
@@ -335,6 +348,40 @@ export default function JarvisDashboard() {
     if (!v) return
     setTasks(t => [...t, { text: v, done: false }])
     setNewTask('')
+  }
+
+  // --- JARVIS voice sample: play pre-rendered clip, fall back to browser TTS ---
+  const base = import.meta.env.BASE_URL // '/JARVIS/' on pages, '/' in dev
+  const clips = [
+    { id: 'greeting', label: 'GREETING', file: `${base}voice/jarvis-greeting.mp3`, text: 'Good morning, sir. JARVIS online. All systems nominal.' },
+    { id: 'status', label: 'STATUS', file: `${base}voice/jarvis-status.mp3`, text: 'Arc reactor holding at one hundred percent. Lab secure, perimeter clear.' },
+    { id: 'focus', label: 'FOCUS', file: `${base}voice/jarvis-focus.mp3`, text: 'Beginning your first priority. Focus session engaged for twenty-five minutes.' },
+  ]
+  const speakBrowser = (text: string) => {
+    try {
+      if (!('speechSynthesis' in window)) { setSpeaking(false); return }
+      window.speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance(text)
+      u.rate = 1.0; u.pitch = 0.9
+      const vs = window.speechSynthesis.getVoices()
+      const gb = vs.find(v => /en-GB/i.test(v.lang) && /male|daniel|george|arthur|ryan/i.test(v.name))
+        || vs.find(v => /en-GB/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang))
+      if (gb) u.voice = gb
+      setSpeaking(true)
+      u.onend = () => setSpeaking(false)
+      window.speechSynthesis.speak(u)
+    } catch { setSpeaking(false) }
+  }
+  const playClip = (file: string, fallback: string) => {
+    try { audioRef.current?.pause() } catch {}
+    setSpeaking(true)
+    const a = new Audio(file)
+    audioRef.current = a
+    let fell = false
+    const fb = () => { if (fell) return; fell = true; speakBrowser(fallback) }
+    a.onended = () => setSpeaking(false)
+    a.onerror = fb
+    a.play().catch(fb)
   }
 
   return (
@@ -556,21 +603,54 @@ export default function JarvisDashboard() {
         </Panel>
       </div>
 
-      {/* ===== BOTTOM: audio spectrum + media ===== */}
-      <div style={{ position: 'absolute', bottom: '2.5%', left: '50%', transform: 'translateX(-50%)', width: '46%', maxWidth: 720 }}>
-        <Panel>
+      {/* ===== BOTTOM-LEFT: comms sample data ===== */}
+      <div style={{ position: 'absolute', bottom: '3%', left: '2%', width: 232 }}>
+        <Panel title="COMMS · SAMPLE" right={<span style={{ fontSize: 9, color: DOWN }}>{INBOX.filter(m => m.unread).length} NEW</span>}>
+          <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, marginBottom: 4 }}>CALENDAR · TODAY</div>
+          {CALENDAR.map((c, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, fontSize: 10, color: CYAN, padding: '2px 0' }}>
+              <span style={{ color: CYAN_DIM }}>▸</span>{c}
+            </div>
+          ))}
+          <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1, margin: '8px 0 4px' }}>INBOX</div>
+          {INBOX.map((m, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, fontSize: 10, padding: '2px 0', color: m.unread ? CYAN : CYAN_DIM }}>
+              <span style={{ color: m.unread ? DOWN : CYAN_DIM }}>{m.unread ? '●' : '○'}</span>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.from}: {m.subj}</span>
+            </div>
+          ))}
+        </Panel>
+      </div>
+
+      {/* ===== BOTTOM-CENTER: JARVIS voice sample + spectrum ===== */}
+      <div style={{ position: 'absolute', bottom: '2.5%', left: '50%', transform: 'translateX(-50%)', width: '52%', maxWidth: 820 }}>
+        <Panel title="JARVIS VOICE · SAMPLE" right={<span style={{ fontSize: 8, color: speaking ? UP : CYAN_SOFT, letterSpacing: 1 }}>{speaking ? '● SPEAKING' : 'neural en-GB · MSI'}</span>}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+            {clips.map(c => (
+              <button key={c.id} onClick={() => playClip(c.file, c.text)} style={btn}>▶ {c.label}</button>
+            ))}
+            <input value={voiceText} onChange={e => setVoiceText(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && speakBrowser(voiceText)}
+              placeholder="Type for JARVIS to speak…"
+              style={{ flex: 1, minWidth: 140, background: 'rgba(2,8,12,0.8)', border: `1px solid ${CYAN_DIM}`, color: CYAN,
+                borderRadius: 6, padding: '7px 10px', fontSize: 11, fontFamily: 'inherit', outline: 'none' }} />
+            <button onClick={() => speaking ? (window.speechSynthesis?.cancel(), audioRef.current?.pause(), setSpeaking(false)) : speakBrowser(voiceText)}
+              style={{ ...btn, borderColor: speaking ? DOWN : CYAN_SOFT, color: speaking ? DOWN : CYAN }}>
+              {speaking ? '■ STOP' : '▶ SPEAK'}
+            </button>
+          </div>
           <Spectrum />
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 6 }}>
             <div style={{ display: 'flex', gap: 14, color: CYAN }}>
               <span style={{ fontSize: 15, cursor: 'pointer' }}>⏮</span>
-              <span style={{ fontSize: 17, cursor: 'pointer', textShadow: `0 0 8px ${CYAN}` }}>⏸</span>
+              <span onClick={() => playClip(clips[0].file, clips[0].text)} style={{ fontSize: 17, cursor: 'pointer', textShadow: `0 0 8px ${CYAN}` }}>{speaking ? '⏸' : '▶'}</span>
               <span style={{ fontSize: 15, cursor: 'pointer' }}>⏭</span>
             </div>
             <div style={{ flex: 1, height: 4, background: CYAN_DIM, borderRadius: 2, position: 'relative' }}>
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '42%', background: CYAN, borderRadius: 2, boxShadow: `0 0 8px ${CYAN}` }} />
               <div style={{ position: 'absolute', left: '42%', top: -3, width: 10, height: 10, borderRadius: '50%', background: '#eafcff', boxShadow: `0 0 8px ${CYAN}` }} />
             </div>
-            <div style={{ fontSize: 10, color: CYAN_SOFT, letterSpacing: 1 }}>01:24 / 03:12</div>
+            <div style={{ fontSize: 9, color: CYAN_SOFT, letterSpacing: 1 }}>SAMPLE · en-GB</div>
           </div>
         </Panel>
       </div>
