@@ -87,24 +87,35 @@ def listen_for_hands_free()->None:
             if overflowed: continue
             now=time.monotonic(); peak=float(np.max(np.abs(samples)))
             if detector.feed(peak,now):
-                write_voice_status(state="active",listening=True,wake_reason="double-clap"); speak("Yes, Sir.",asynchronous=False)
+                write_voice_status(state="active",listening=True,wake_reason="double-clap")
+                microphone.stop()
+                speak("Yes, Sir.",asynchronous=False)
                 command=_transcribe(model,_record_command(sd,np),np)
                 if command:_handle_command(command)
+                microphone.start()
                 write_voice_status(state="standby",listening=True); continue
             buffer.extend(np.asarray(samples[:,0],dtype=np.float32))
             if len(buffer)<standby_samples: continue
             text=_transcribe(model,np.asarray(buffer,dtype=np.float32),np); woke,inline_command=_contains_wake_word(text)
             if not woke: continue
-            write_voice_status(state="active",listening=True,wake_reason="voice"); speak("Yes, Sir. I am listening.",asynchronous=False)
+            write_voice_status(state="active",listening=True,wake_reason="voice")
+            microphone.stop()
+            speak("Yes, Sir. I am listening.",asynchronous=False)
             command=inline_command or _transcribe(model,_record_command(sd,np),np)
             if not command:
-                speak("I didn't catch that, Sir.",asynchronous=False); write_voice_status(state="standby",listening=True); continue
+                speak("I didn't catch that, Sir.",asynchronous=False)
+                microphone.start()
+                write_voice_status(state="standby",listening=True); continue
             lowered=command.lower()
             if any(p in lowered for p in EXIT_PHRASES):
                 speak("Understood, Sir. Shutting down the voice listener.",asynchronous=False); write_voice_status(state="offline",listening=False); return
             if any(p in lowered for p in SLEEP_PHRASES):
-                speak("Standby, Sir. Say Jarvis when you need me.",asynchronous=False); write_voice_status(state="standby",listening=True); continue
-            _handle_command(command); write_voice_status(state="standby",listening=True)
+                speak("Standby, Sir. Say Jarvis when you need me.",asynchronous=False)
+                microphone.start()
+                write_voice_status(state="standby",listening=True); continue
+            _handle_command(command)
+            microphone.start()
+            write_voice_status(state="standby",listening=True)
 
 def listen_for_claps()->None: listen_for_hands_free()
 
