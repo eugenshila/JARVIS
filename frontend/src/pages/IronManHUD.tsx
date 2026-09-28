@@ -709,7 +709,7 @@ export default function IronManHUD() {
               {loading ? '...' : 'TRANSMIT'}
             </button>
             <button 
-              onClick={startVoice}
+              onClick={()=> isListening ? stopVoice() : startVoice(true)}
               style={{
                 background: isListening ? 'rgba(239,68,68,0.2)' : 'rgba(2,2,8,0.8)',
                 border:`1px solid ${isListening ? '#ef4444' : 'rgba(34,197,94,0.3)'}`,
@@ -720,9 +720,9 @@ export default function IronManHUD() {
                 cursor:'pointer',
                 animation: isListening ? 'pulse 1s infinite' : 'none'
               }}
-              title="Voice: Click to speak (mic + waveform + TTS)" 
+              title="Hands-free voice: enable once, then JARVIS keeps listening automatically" 
             >
-              🎤
+              {isListening ? '🎙️ ON' : '🎤 OFF'}
             </button>
           </div>
         </div>
