@@ -16,6 +16,8 @@ export default function IronManCircularHUD() {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<any>({ voice_name: "detecting voice" });
+  const lastVoiceEvent = useRef(0);
   const [focusItems, setFocusItems] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("jarvis_focus") || "[]"); } catch { return []; }
   });
@@ -275,6 +277,30 @@ export default function IronManCircularHUD() {
     const timer = window.setInterval(pollVoice, 700);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+
+  const send = async () => {
+    if (!input.trim() || busy) return;
+    const userMessage = input.trim();
+    setInput("");
+    setBusy(true);
+    setError("");
+    setMessages(previous => [...previous, { role: "user", content: userMessage }]);
+    try {
+      const res = await fetch("/hud/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [...messages, { role: "user", content: userMessage }] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "JARVIS could not respond.");
+      const answer = String(data.content || "").trim();
+      if (answer) setMessages(previous => [...previous, { role: "assistant", content: answer }]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "JARVIS communication error.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const addFocus = () => {
     if (newFocus.trim()) setFocusItems(items => [...items, newFocus.trim()].slice(0, 3));
