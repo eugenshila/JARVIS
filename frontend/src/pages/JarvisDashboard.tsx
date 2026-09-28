@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 
 /*
   JARVIS holographic desktop dashboard — single unified view.
+  (build marker: redeploy dashboard to GitHub Pages)
   Central arc reactor (large), clock + gauge dials, storage / energy readouts,
   an ADHD co-pilot panel that runs "inside" the HUD, a live task list, a stock
   market watchlist, a multi-day weather panel, and an audio spectrum with media
