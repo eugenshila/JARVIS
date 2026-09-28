@@ -5,6 +5,7 @@ import ADHDPage from './pages/ADHD'
 import BodyDouble from './pages/BodyDouble'
 import ArcReactor3D from './pages/ArcReactor3D'
 import IronManCircularHUD from './pages/IronManCircularHUD'
+import JarvisDashboard from './pages/JarvisDashboard'
 
 type Agent = string
 type Message = { role: 'user' | 'assistant' | 'system', content: string }
@@ -28,11 +29,15 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [health, setHealth] = useState<any>(null)
   const [context, setContext] = useState('')
-  const [mode, setMode] = useState<'chat' | 'ironman' | 'hud' | 'adhd' | 'bodydouble' | 'arc' | 'circular'>('circular')
+  const [mode, setMode] = useState<'chat' | 'ironman' | 'hud' | 'adhd' | 'bodydouble' | 'arc' | 'circular' | 'dashboard'>('dashboard')
 
   useEffect(() => {
     fetch('/health').then(r=>r.json()).then(setHealth).catch(()=>{})
   }, [])
+
+  if (mode === 'dashboard') {
+    return <JarvisDashboard />
+  }
 
   if (mode === 'adhd') {
     return (
@@ -99,6 +104,7 @@ export default function App() {
     return (
       <div>
         <div style={{position:'absolute', top:10, right:10, zIndex:100, display:'flex', gap:8, flexWrap:'wrap'}}>
+          <button onClick={()=>setMode('dashboard')} style={{background:'rgba(2,2,8,0.9)', border:'1px solid #22d3ee', color:'#22d3ee', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>◆ DASHBOARD</button>
           <button onClick={()=>setMode('circular')} style={{background:'rgba(2,2,8,0.9)', border:'1px solid #06b6d4', color:'#06b6d4', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>CIRCULAR HUD • LIKE SCREENSHOT</button>
           <button onClick={()=>setMode('adhd')} style={{background:'rgba(2,2,8,0.9)', border:'1px solid #a78bfa', color:'#a78bfa', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>ADHD CO-PILOT</button>
           <button onClick={()=>setMode('bodydouble')} style={{background:'rgba(2,2,8,0.9)', border:'1px solid #f59e0b', color:'#f59e0b', borderRadius:20, padding:'6px 12px', fontSize:11, cursor:'pointer', letterSpacing:1}}>BODY DOUBLE</button>
