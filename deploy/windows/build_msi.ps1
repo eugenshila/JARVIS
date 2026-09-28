@@ -4,8 +4,9 @@
 #   .\deploy\windows\build_msi.ps1 -Version 0.2.0
 #   .\deploy\windows\build_msi.ps1 -Version 0.2.0 -SkipDeps
 #
-# The MSI deliberately packages a PyInstaller one-file executable.  That keeps
-# the installer from omitting DLLs or one of the package's runtime modules.
+# The MSI deliberately packages PyInstaller one-file executables. That keeps the
+# installer from omitting DLLs or one of the package's runtime modules while also
+# installing the native desktop HUD host.
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
@@ -13,7 +14,7 @@ param(
     [string]$PythonExe = "python",
     [switch]$SkipDeps,
     # Kept as an explicit, backwards-compatible switch because older build
-    # instructions documented -OneFile.  MSI builds are always one-file.
+    # instructions documented -OneFile. MSI builds are always one-file.
     [switch]$OneFile
 )
 
@@ -97,9 +98,14 @@ try {
     Remove-Item -Recurse -Force $Dist, (Join-Path $Root "build") -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $Dist -Force | Out-Null
 
-    # Use forward slashes only for the entry point; PyInstaller accepts the
-    # Windows source;destination separator in --add-data values.
-    $pyArgs = @(
+    $iconArgs = @()
+    if (Test-Path "assets/icon.ico") {
+        $iconArgs = @("--icon", "assets/icon.ico")
+    }
+
+    # Boot launcher used by the installer auto-start entry. It starts Ollama,
+    # serves the bundled HUD/API, and starts the hands-free voice companion.
+    $pyArgs = $iconArgs + @(
         "--clean", "--noconfirm", "--onefile", "--console",
         "--name", "jarvis",
         "--paths", "src",
@@ -129,9 +135,6 @@ try {
         "--hidden-import", "numpy",
         "src/jarvis/startup/windows_boot.py"
     )
-    if (Test-Path "assets/icon.ico") {
-        $pyArgs = @("--icon", "assets/icon.ico") + $pyArgs
-    }
     Invoke-Native $PythonExe (@("-m", "PyInstaller") + $pyArgs)
 
     $exePath = Join-Path $Dist "jarvis.exe"
@@ -139,8 +142,35 @@ try {
         throw "PyInstaller completed but $exePath was not created."
     }
 
+    # Native desktop HUD host used by Start Menu/manual launches. It serves the
+    # same production React HUD as development and opens it in WebView2 with an
+    # Edge/browser fallback instead of the old unrelated Tkinter approximation.
+    $desktopArgs = $iconArgs + @(
+        "--clean", "--noconfirm", "--onefile", "--windowed",
+        "--name", "jarvis-desktop",
+        "--paths", "src",
+        "--add-data", "frontend/dist;frontend/dist",
+        "--add-data", "configs;configs",
+        "--collect-all", "jarvis",
+        "--collect-all", "webview",
+        "--collect-all", "uvicorn",
+        "--hidden-import", "jarvis.server.api",
+        "--hidden-import", "uvicorn.logging",
+        "--hidden-import", "uvicorn.loops.auto",
+        "--hidden-import", "uvicorn.protocols.http.auto",
+        "--hidden-import", "uvicorn.protocols.websockets.auto",
+        "--hidden-import", "uvicorn.lifespan.on",
+        "src/jarvis/cli/desktop_gui.py"
+    )
+    Invoke-Native $PythonExe (@("-m", "PyInstaller") + $desktopArgs)
+
+    $desktopExePath = Join-Path $Dist "jarvis-desktop.exe"
+    if (-not (Test-Path $desktopExePath)) {
+        throw "PyInstaller completed but $desktopExePath was not created."
+    }
+
     # Compile the checked-in WXS so local builds and CI use exactly the same
-    # installer definition.  ProductVersion is supplied as a WiX variable;
+    # installer definition. ProductVersion is supplied as a WiX variable;
     # this avoids generating a second, easy-to-drift WXS file in the workspace.
     $wxsPath = Join-Path $Root "deploy\windows\jarvis.wxs"
     Invoke-Native "candle.exe" @(
@@ -155,10 +185,11 @@ try {
     }
 
     $zipPath = Join-Path $Dist "JARVIS-$Version-portable.zip"
-    Compress-Archive -Path $exePath -DestinationPath $zipPath -Force
+    Compress-Archive -Path @($exePath, $desktopExePath) -DestinationPath $zipPath -Force
 
     Write-Host "=== BUILD COMPLETE ===" -ForegroundColor Green
-    Write-Host "EXE: $exePath"
+    Write-Host "Boot EXE: $exePath"
+    Write-Host "Desktop HUD EXE: $desktopExePath"
     Write-Host "MSI: $MsiPath"
     Write-Host "ZIP: $zipPath"
 }
