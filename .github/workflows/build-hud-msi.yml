@@ -103,3 +103,5 @@ jobs:
             dist/JARVIS-HUD-0.2.0-x64.msi
             dist/JARVIS-HUD.exe
           if-no-files-found: error
+
+# Build verification: package the exact checked-in circular HUD and startup launcher.
