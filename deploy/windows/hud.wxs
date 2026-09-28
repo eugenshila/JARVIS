@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="SHILATECH JARVIS" Language="1033" Version="0.3.0" Manufacturer="Shilatech"
+  <Product Id="*" Name="SHILATECH JARVIS" Language="1033" Version="0.3.1" Manufacturer="Shilatech"
            UpgradeCode="5b8fa79e-5654-4c0b-ab2d-b4a10480883d">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" Platform="x64" />
     <MajorUpgrade DowngradeErrorMessage="A newer SHILATECH JARVIS is already installed." />
