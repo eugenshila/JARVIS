@@ -9,7 +9,7 @@ MSI (Microsoft Installer) is the standard Windows installer package. It handles:
 - Upgrade/downgrade logic
 - Rollback on failure
 
-This guide shows how to build `JARVIS-0.1.0-x64.msi`.
+This guide shows how to build `JARVIS-0.2.0-x64.msi`.
 
 ---
 
@@ -35,12 +35,12 @@ git clone https://github.com/eugenshila/JARVIS
 cd JARVIS
 
 # 2. Build MSI (one command)
-.\deploy\windows\build_msi.ps1 -Version 0.1.0
+.\deploy\windows\build_msi.ps1 -Version 0.2.0
 
 # Output:
 # dist/jarvis.exe (one-file executable with dependencies bundled)
-# dist/JARVIS-0.1.0-x64.msi (installer)
-# dist/JARVIS-0.1.0-portable.zip (portable one-file executable)
+# dist/JARVIS-0.2.0-x64.msi (installer)
+# dist/JARVIS-0.2.0-portable.zip (portable one-file executable)
 ```
 
 **What the script does:**
@@ -54,10 +54,10 @@ cd JARVIS
 
 ```powershell
 # Double-click in Explorer, or:
-msiexec /i dist\JARVIS-0.1.0-x64.msi
+msiexec /i dist\JARVIS-0.2.0-x64.msi
 
 # Silent install (for IT deployment)
-msiexec /i JARVIS-0.1.0-x64.msi /quiet
+msiexec /i JARVIS-0.2.0-x64.msi /quiet
 
 # After install, open NEW PowerShell:
 jarvis doctor
@@ -74,7 +74,7 @@ jarvis ask "hello" --mock
 ### Uninstall
 
 - Control Panel → Programs → JARVIS → Uninstall
-- Or: `msiexec /x JARVIS-0.1.0-x64.msi`
+- Or: `msiexec /x JARVIS-0.2.0-x64.msi`
 - Or Start Menu → Uninstall JARVIS
 
 ---
@@ -112,8 +112,8 @@ The repo includes `.github/workflows/build-msi.yml` which builds MSI automatical
 
 **Trigger:**
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 # GitHub Actions builds MSI+EXE+ZIP and creates Release
 ```
 
@@ -128,7 +128,7 @@ Check releases at: https://github.com/eugenshila/JARVIS/releases
 Edit `deploy/windows/jarvis.wxs`:
 
 ```xml
-<Product Name="JARVIS - Personal AI" Version="0.1.0" Manufacturer="Your Company">
+<Product Name="JARVIS - Personal AI" Version="0.2.0" Manufacturer="Your Company">
 ```
 
 Icon: place `assets/icon.ico` (256x256) before build. Generate from PNG:
@@ -203,8 +203,8 @@ See [`docs/install/LAPTOP_SETUP.md`](LAPTOP_SETUP.md) for full guide. Summary:
 | WiX (build MSI) | wixtoolset.org | 50 MB | Only for building MSI |
 
 **For end users (not building):**
-- Just download `JARVIS-0.1.0-x64.msi` from Releases and double-click
-- Or `JARVIS-0.1.0-portable.zip`, unzip, add to PATH
+- Just download `JARVIS-0.2.0-x64.msi` from Releases and double-click
+- Or `JARVIS-0.2.0-portable.zip`, unzip, add to PATH
 
 **For developers:**
 - Python + `pip install -e .[all]`

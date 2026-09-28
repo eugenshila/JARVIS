@@ -165,7 +165,7 @@ export default function App() {
           <span style={{ fontWeight:800, fontSize:22, color:'#22c55e' }}>JARVIS</span>
           <span style={{ color:'#94a3b8', fontSize:13 }}>Personal AI, On Personal Devices</span>
           <span style={{ fontSize:11, padding:'2px 8px', background:'#1e293b', borderRadius:12, color: health ? '#22c55e' : '#f59e0b' }}>
-            {health ? `● v${health.version || '0.1.0'} · ${health.status}` : '○ offline — run jarvis serve'}
+            {health ? `● v${health.version || '0.2.0'} · ${health.status}` : '○ offline — run jarvis serve'}
           </span>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>

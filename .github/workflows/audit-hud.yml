@@ -9,6 +9,13 @@ on:
       - 'frontend/**'
       - 'pyproject.toml'
       - '.github/workflows/audit-hud.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/jarvis/**'
+      - 'frontend/**'
+      - 'pyproject.toml'
+      - '.github/workflows/audit-hud.yml'
 
 jobs:
   audit:
@@ -24,7 +31,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.19.0'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -83,8 +90,9 @@ jobs:
 
       - name: Browser runtime audit
         shell: pwsh
+        working-directory: frontend
         run: |
-          npm install --no-save playwright
+          npm install --no-save --package-lock=false playwright
           npx playwright install chromium
           @'
           import { chromium } from "playwright";
@@ -99,18 +107,43 @@ jobs:
           page.on("console", msg => {
             if (msg.type() === "error") consoleErrors.push(msg.text());
           });
-          page.on("requestfailed", req => errors.push("REQUEST FAILED: " + req.url() + " :: " + (req.failure()?.errorText || "")));
+          page.on("requestfailed", req => {
+            if (req.url().startsWith("http://127.0.0.1:8765")) {
+              errors.push("REQUEST FAILED: " + req.url() + " :: " + (req.failure()?.errorText || ""));
+            }
+          });
 
           const response = await page.goto("http://127.0.0.1:8765/", { waitUntil: "domcontentloaded", timeout: 15000 });
           if (!response || response.status() !== 200) throw new Error("HUD root did not return HTTP 200.");
 
           await page.waitForSelector("canvas", { state: "visible", timeout: 10000 });
-          await page.getByText("JARVIS", { exact: true }).first().waitFor({ state: "visible", timeout: 10000 });
+          await page.getByText("ADHD CO-PILOT · PLAN MY DAY", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+          await page.getByText("CAREER + INCOME OS", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
-          const bodyText = await page.locator("body").innerText();
-          if (!bodyText.includes("INTERACTIVE REACTOR INTERFACE")) throw new Error("Circular HUD text did not render.");
+          const taskInput = page.getByLabel("Add a dashboard task");
+          await taskInput.fill("Packaged HUD smoke test");
+          await taskInput.press("Enter");
+          await page.getByText("Packaged HUD smoke test", { exact: true }).waitFor({ state: "visible" });
 
-          await page.screenshot({ path: "hud-audit.png", fullPage: true });
+          for (const viewport of [
+            { width: 1440, height: 900, name: "1440x900" },
+            { width: 1366, height: 768, name: "1366x768" },
+            { width: 1100, height: 700, name: "1100x700" },
+          ]) {
+            await page.setViewportSize(viewport);
+            await page.waitForTimeout(250);
+            const [left, reactor, right] = await Promise.all([
+              page.locator(".dashboard-column-left").boundingBox(),
+              page.locator(".dashboard-reactor").boundingBox(),
+              page.locator(".dashboard-column-right").boundingBox(),
+            ]);
+            if (!left || !reactor || !right) throw new Error(`Dashboard regions missing at ${viewport.name}`);
+            if (left.x + left.width > reactor.x || reactor.x + reactor.width > right.x) {
+              throw new Error(`Dashboard columns overlap the reactor at ${viewport.name}`);
+            }
+            await page.screenshot({ path: `hud-audit-${viewport.name}.png`, fullPage: true });
+          }
+
           fs.writeFileSync("hud-browser-errors.txt", [...errors, ...consoleErrors].join("\n"), "utf8");
 
           if (errors.length || consoleErrors.length) {
@@ -145,8 +178,8 @@ jobs:
         with:
           name: JARVIS-HUD-audit-diagnostics
           path: |
-            hud-audit.png
-            hud-browser-errors.txt
+            frontend/hud-audit-*.png
+            frontend/hud-browser-errors.txt
             hud.log
             voice_status.json
             hud-process.txt

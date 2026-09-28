@@ -280,7 +280,19 @@ export default function JarvisDashboard() {
 
   // reactor size responsive
   useEffect(() => {
-    const fit = () => setReactor(Math.round(Math.min(820, window.innerWidth * 0.52, window.innerHeight * 0.88)))
+    const fit = () => {
+      // Keep the reactor clear of both information columns at the desktop
+      // launcher's supported minimum size (1100×700) and at Windows scaling.
+      const width = window.innerWidth
+      const compact = width <= 1250 || window.innerHeight <= 760
+      const leftWidth = compact ? 280 : Math.min(370, Math.max(320, width * 0.20))
+      const rightWidth = compact ? 260 : Math.min(330, Math.max(286, width * 0.18))
+      const edge = width * 0.02
+      const leftRoom = 2 * (width / 2 - edge - leftWidth - 8)
+      const rightRoom = 2 * (width / 2 - edge - rightWidth - 8)
+      const horizontalRoom = Math.max(360, Math.min(leftRoom, rightRoom))
+      setReactor(Math.round(Math.min(820, width * 0.52, window.innerHeight * 0.88, horizontalRoom)))
+    }
     fit()
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)
@@ -465,7 +477,7 @@ export default function JarvisDashboard() {
       </div>
 
       {/* ===== CENTER: big arc reactor ===== */}
-      <div style={{ position: 'absolute', top: '52%', left: '50%', transform: 'translate(-50%,-50%)' }}>
+      <div className="dashboard-reactor" style={{ position: 'absolute', top: '52%', left: '50%', transform: 'translate(-50%,-50%)' }}>
         <ArcReactor size={reactor} />
       </div>
       {[
@@ -477,7 +489,7 @@ export default function JarvisDashboard() {
       ))}
 
       {/* ===== LEFT COLUMN: storage, energy, ADHD co-pilot ===== */}
-      <div style={{ position: 'absolute', top: '22%', left: '2%', bottom: '3%', width: 'clamp(320px, 20vw, 370px)', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
+      <div className="dashboard-column dashboard-column-left" style={{ position: 'absolute', top: '22%', left: '2%', bottom: '3%', width: 'clamp(320px, 20vw, 370px)', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
         {/* ADHD co-pilot — day planning, runs inside the system */}
         <Panel title="ADHD CO-PILOT · PLAN MY DAY" right={<span style={{ fontSize: 10, color: UP, letterSpacing: 1 }}>● RUNNING</span>}>
           {/* focus timer + do-now */}
@@ -592,7 +604,7 @@ export default function JarvisDashboard() {
       </div>
 
       {/* ===== RIGHT COLUMN: weather, tasks, stocks ===== */}
-      <div style={{ position: 'absolute', top: '15%', right: '2%', bottom: '3%', width: 'clamp(286px, 18vw, 330px)', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
+      <div className="dashboard-column dashboard-column-right" style={{ position: 'absolute', top: '15%', right: '2%', bottom: '3%', width: 'clamp(286px, 18vw, 330px)', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 }}>
         <Panel title="5-DAY FORECAST · NAIROBI">
           {FORECAST.map((f, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0',
@@ -622,7 +634,7 @@ export default function JarvisDashboard() {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-            <input value={newTask} onChange={e => setNewTask(e.target.value)}
+            <input aria-label="Add a dashboard task" value={newTask} onChange={e => setNewTask(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Add task + Enter"
               style={{ flex: 1, background: 'rgba(2,8,12,0.8)', border: `1px solid ${CYAN_DIM}`, color: CYAN,
                 borderRadius: 8, padding: '9px 11px', minHeight: 38, fontSize: 13, lineHeight: 1.35, fontFamily: 'inherit', outline: 'none' }} />
@@ -668,13 +680,13 @@ export default function JarvisDashboard() {
       </div>
 
       {/* ===== BOTTOM-CENTER: JARVIS voice sample + spectrum ===== */}
-      <div style={{ position: 'absolute', bottom: '2.5%', left: '50%', transform: 'translateX(-50%)', width: '52%', maxWidth: 820 }}>
+      <div className="dashboard-voice-panel" style={{ position: 'absolute', bottom: '2.5%', left: '50%', transform: 'translateX(-50%)', width: 'min(52%, calc(100% - 650px))', minWidth: 430, maxWidth: 820 }}>
         <Panel title="JARVIS VOICE · SAMPLE" right={<span style={{ fontSize: 10, color: speaking ? UP : CYAN_SOFT, letterSpacing: 1 }}>{speaking ? '● SPEAKING' : 'neural en-GB · MSI'}</span>}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
             {clips.map(c => (
               <button key={c.id} onClick={() => playClip(c.file, c.text)} style={btn}>▶ {c.label}</button>
             ))}
-            <input value={voiceText} onChange={e => setVoiceText(e.target.value)}
+            <input aria-label="Text for JARVIS to speak" value={voiceText} onChange={e => setVoiceText(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && speakBrowser(voiceText)}
               placeholder="Type for JARVIS to speak…"
               style={{ flex: 1, minWidth: 140, background: 'rgba(2,8,12,0.8)', border: `1px solid ${CYAN_DIM}`, color: CYAN,
@@ -712,6 +724,14 @@ export default function JarvisDashboard() {
         .pulse-core { animation: pulseCore 2.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
         input::placeholder { color: rgba(125,226,245,0.62); opacity: 1; }
         input:focus { border-color: #67e8f9 !important; box-shadow: 0 0 0 2px rgba(34,211,238,0.16), 0 0 14px rgba(34,211,238,0.12); }
+        @media (max-width: 1250px), (max-height: 760px) {
+          .dashboard-column-left { width: 280px !important; }
+          .dashboard-column-right { width: 260px !important; }
+          .dashboard-voice-panel { width: min(48%, calc(100% - 620px)) !important; min-width: 430px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .spin-slow, .spin-slow2, .spin-rev, .spin-fast, .pulse-core { animation: none !important; }
+        }
         ::-webkit-scrollbar { width: 7px; }
         ::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.3); border-radius: 3px; }
       `}</style>

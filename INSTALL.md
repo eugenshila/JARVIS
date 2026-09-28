@@ -7,7 +7,7 @@
 
 ### Windows — Easiest (MSI)
 
-1. **Download MSI** from GitHub Releases: `JARVIS-0.1.0-x64.msi` (once we publish a release)
+1. **Download MSI** from GitHub Releases: `JARVIS-0.2.0-x64.msi` (once we publish a release)
 2. **Double-click MSI**, follow wizard (installs to `C:\Program Files\JARVIS\`)
 3. **Open new PowerShell**:
    ```powershell
@@ -22,14 +22,14 @@
 # Install WiX Toolset v3.11 from https://wixtoolset.org/releases/
 git clone https://github.com/eugenshila/JARVIS
 cd JARVIS
-.\deploy\windows\build_msi.ps1 -Version 0.1.0
-# Output: dist/JARVIS-0.1.0-x64.msi
+.\deploy\windows\build_msi.ps1 -Version 0.2.0
+# Output: dist/JARVIS-0.2.0-x64.msi
 ```
 
 **Or portable (no admin):**
 ```powershell
 # After building, unzip
-Expand-Archive dist\JARVIS-0.1.0-portable.zip -DestinationPath C:\Tools\JARVIS
+Expand-Archive dist\JARVIS-0.2.0-portable.zip -DestinationPath C:\Tools\JARVIS
 $env:PATH += ";C:\Tools\JARVIS\jarvis"
 ```
 

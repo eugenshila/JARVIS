@@ -36,11 +36,11 @@ This folder contains everything to build a Windows installer for JARVIS.
 git clone https://github.com/eugenshila/JARVIS
 cd JARVIS
 
-# Build (creates dist/JARVIS-0.1.0-x64.msi and dist/jarvis.exe)
-.\deploy\windows\build_msi.ps1 -Version 0.1.0 -OneFile
+# Build (creates dist/JARVIS-0.2.0-x64.msi and dist/jarvis.exe)
+.\deploy\windows\build_msi.ps1 -Version 0.2.0 -OneFile
 
 # Or build single-file EXE
-.\deploy\windows\build_msi.ps1 -Version 0.1.0 -OneFile
+.\deploy\windows\build_msi.ps1 -Version 0.2.0 -OneFile
 ```
 
 ### Option B: Manual with PyInstaller
@@ -71,12 +71,12 @@ jarvis ask "hello" --mock
 ## Output
 
 - `dist/jarvis.exe` — one-file main executable (all dependencies bundled)
-- `dist/JARVIS-0.1.0-x64.msi` — Windows installer (if WiX installed)
-- `dist/JARVIS-0.1.0-portable.zip` — portable ZIP containing the executable
+- `dist/JARVIS-0.2.0-x64.msi` — Windows installer (if WiX installed)
+- `dist/JARVIS-0.2.0-portable.zip` — portable ZIP containing the executable
 
 ## Installing the MSI
 
-1. Double-click `JARVIS-0.1.0-x64.msi`
+1. Double-click `JARVIS-0.2.0-x64.msi`
 2. Follow wizard (installs to `C:\Program Files\JARVIS\`)
 3. Adds `C:\Program Files\JARVIS\` to system PATH
 4. Start menu shortcut: **JARVIS**
@@ -128,8 +128,8 @@ Workflow:
 
 To trigger:
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## Icon
