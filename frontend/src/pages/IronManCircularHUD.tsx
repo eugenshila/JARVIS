@@ -249,84 +249,31 @@ export default function IronManCircularHUD() {
   }, []);
 
 
-  const speak = (text: string) => {
-    if (!voiceEnabled || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 650).replace(/```[\s\S]*?```/g, " ").replace(/[*#`]/g, ""));
-    utterance.rate = 1;
-    const voices = window.speechSynthesis.getVoices();\n    const voice = voices.find(v => /Microsoft George|^George$/i.test(v.name)) || voices.find(v => /Microsoft Ryan|^Ryan$/i.test(v.name)) || voices.find(v => /British|English UK|en-GB/i.test(v.name + " " + v.lang));
-    if (voice) utterance.voice = voice;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const send = async (spoken?: string) => {
-    const prompt = (spoken ?? input).trim();
-    if (!prompt || busyRef.current) return;
-    busyRef.current = true;
-    const history: ChatMessage[] = [...messages, { role: "user", content: prompt }];
-    setMessages(history);
-    setInput("");
-    setError("");
-    setBusy(true);
-    try {
-      const res = await fetch("/hud/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
-      if (!data.content) throw new Error("Ollama returned an empty response.");
-      setMessages(previous => [...previous, { role: "assistant", content: data.content }]);
-      setStatus("ready");
-      speak(data.content);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not reach Ollama.");
-      checkStatus();
-    } finally { busyRef.current = false; setBusy(false); }
-  };
-
-  const startRecognition = useRef<(() => void) | null>(null);
-  const recognitionRef = useRef<any>(null);
-
-  const listen = () => {
-    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!Recognition) { setError("Speech recognition is unavailable in this browser. You can type instead."); return; }
-    const recognition = new Recognition();
-    recognition.lang = "en-GB";
-    recognition.continuous = true;
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => {
-      setIsListening(false);
-      recognitionRef.current = null;
-      // Keep the HUD hands-free. Browser permission is requested once; after that
-      // recognition is restarted automatically whenever the engine stops.
-      window.setTimeout(() => startRecognition.current?.(), 350);
-    };
-    recognition.onerror = () => { setIsListening(false); setError("Microphone recognition failed. Check browser microphone access."); };
-    recognition.onresult = (event: any) => {
-      const result = event.results[event.results.length - 1];
-      if (!result?.isFinal) return;
-      const transcript = String(result[0]?.transcript || "").trim();
-      if (!transcript) return;
-      const match = transcript.match(/^(?:hey\\s+)?jarvis[,:]?\\s*(.*)$/i);
-      if (match?.[1]?.trim()) send(match[1].trim());
-    };
-    recognition.start();
-  };
-
-  startRecognition.current = listen;
-
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try { startRecognition.current?.(); } catch { /* microphone permission can be granted with the fallback button */ }
-    }, 900);
-    return () => {
-      window.clearTimeout(timer);
-      try { recognitionRef.current?.stop(); } catch {}
-      recognitionRef.current = null;
+    let cancelled = false;
+    const pollVoice = async () => {
+      try {
+        const res = await fetch("/hud/voice-status");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setVoiceStatus(data);
+        setIsListening(Boolean(data.listening));
+        const eventId = Number(data.event_id || 0);
+        if (eventId && eventId !== lastVoiceEvent.current) {
+          lastVoiceEvent.current = eventId;
+          if (data.transcript) {
+            setMessages(previous => [...previous, { role: "user", content: data.transcript }]);
+          }
+          if (data.response) {
+            setMessages(previous => [...previous, { role: "assistant", content: data.response }]);
+          }
+        }
+      } catch { /* voice companion may still be starting */ }
     };
+    pollVoice();
+    const timer = window.setInterval(pollVoice, 700);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
   const addFocus = () => {
@@ -347,7 +294,7 @@ export default function IronManCircularHUD() {
           <section className="hud-panel"><h2>WEATHER</h2><div className="mt-3 text-cyan-300 text-3xl">Nairobi</div><p className="text-slate-400 text-xs mt-1">Live weather feed will appear here.</p></section>
           <section className="hud-panel"><h2>MODEL LINK</h2><div className="text-cyan-300 text-lg mt-3">qwen2.5:3b</div><p className="text-slate-400 text-[11px] mt-2">Connected locally through Ollama on this computer.</p><p className="mt-3 text-[11px] text-amber-400">{status === "model_missing" ? "Run: ollama pull qwen2.5:3b" : status === "unavailable" ? "Start Ollama and the JARVIS server." : status === "ready" ? "Model installed and ready to answer." : "Checking local model..."}</p></section>
           <section className="hud-panel"><h2>TODAY’S THREE PRIORITIES</h2><div className="space-y-2 mt-3">{focusItems.length ? focusItems.map((item,i) => <div key={i} className="flex gap-2 items-start text-xs"><button className="text-cyan-400 border border-cyan-900 rounded-full w-5 h-5 shrink-0" title="Mark complete" onClick={() => setFocusItems(items => items.filter((_,j) => i !== j))}>✓</button><span>{item}</span></div>) : <p className="text-slate-500 text-[11px]">Set up to three things to focus on today.</p>}</div>{focusItems.length < 3 && <div className="flex gap-1 mt-3"><input className="hud-input min-w-0 w-full" value={newFocus} onChange={e => setNewFocus(e.target.value)} onKeyDown={e => e.key === "Enter" && addFocus()} placeholder="Add a priority"/><button onClick={addFocus} className="hud-button">+</button></div>}</section>
-          <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Spoken replies are on. JARVIS uses the installed Windows British voice for the desktop companion. The HUD now keeps speech recognition running automatically when the browser permits it. Say “Jarvis” before a command.</p><button className="hud-button mt-3" onClick={() => { setVoiceEnabled(v => !v); window.speechSynthesis?.cancel(); }}>{voiceEnabled ? "SPOKEN REPLIES ON" : "ENABLE SPOKEN REPLIES"}</button></section>
+          <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Voice is handled by the Windows desktop companion. Wake with “Jarvis” or double-clap; no microphone button is required. <span className="text-cyan-300">{voiceStatus.voice_name || "detecting voice"}</span>.</p></section>
         </aside>
         <main className="flex flex-col items-center justify-center py-4 px-4 min-w-0">
           <div className="text-center mb-2"><div className="text-2xl font-semibold tracking-[.25em] text-cyan-100">JARVIS</div><div className="text-[9px] tracking-[.45em] text-cyan-600 mt-1">PERSONAL LOCAL INTELLIGENCE</div></div>
@@ -358,7 +305,7 @@ export default function IronManCircularHUD() {
         <aside className="border-l border-cyan-900/40 bg-black/50 flex flex-col min-h-[500px] xl:h-[calc(100vh-60px)]">
           <div className="p-4 border-b border-cyan-900/40"><h2 className="text-cyan-400 tracking-[.2em] text-xs">COMMUNICATIONS</h2><p className="text-slate-500 text-[11px] mt-2">Conversation stays in this window while it is open. Ollama runs locally.</p></div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[280px]" aria-live="polite">{!messages.length && <div className="text-slate-400 text-xs leading-6">Hello, {userName}. Ask me a question, plan your day, or talk through a task. I’ll use Qwen through your local Ollama installation.</div>}{messages.map((m,i) => <div key={i} className={`border-l-2 pl-3 text-xs leading-5 whitespace-pre-wrap break-words ${m.role === "user" ? "border-emerald-500 text-emerald-200" : "border-cyan-500 text-cyan-100"}`}><div className="text-[9px] tracking-widest text-slate-500 mb-1">{m.role === "user" ? "YOU" : "JARVIS"}</div>{m.content}</div>)}{busy && <div className="text-cyan-500 text-xs animate-pulse">JARVIS is thinking…</div>}<div ref={chatEnd}/></div>
-          <div className="p-4 border-t border-cyan-900/40 space-y-2 bg-black/35">{error && <div className="text-amber-400 text-[11px]" role="alert">{error}</div>}<div className="flex gap-2"><div className="flex-1 hud-input flex items-center gap-3"><span className={isListening ? "text-cyan-300 animate-pulse" : "text-slate-500"}>◉</span><input className="bg-transparent border-0 outline-none flex-1 min-w-0 text-cyan-100" aria-label="Message JARVIS" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder={isListening ? 'Always listening — say “Jarvis”...' : 'Ask JARVIS…'}/></div><button onClick={listen} className="hud-button" aria-label="Speak to JARVIS">{isListening ? "●" : "🎤"}</button><button onClick={() => send()} disabled={busy || !input.trim()} className="hud-button disabled:opacity-40">SEND</button></div><div className="text-[10px] text-cyan-700">{isListening ? "ALWAYS LISTENING • WAKE WORD: JARVIS" : "MICROPHONE STANDBY • CLICK TO ENABLE"}</div></div>
+          <div className="p-4 border-t border-cyan-900/40 space-y-2 bg-black/35">{error && <div className="text-amber-400 text-[11px]" role="alert">{error}</div>}<div className="flex gap-2"><div className="flex-1 hud-input flex items-center gap-3"><span className={isListening ? "text-cyan-300 animate-pulse" : "text-slate-500"}>◉</span><input className="bg-transparent border-0 outline-none flex-1 min-w-0 text-cyan-100" aria-label="Message JARVIS" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder={isListening ? 'Always listening — say “Jarvis”...' : 'Ask JARVIS…'}/></div><span className={`hud-button ${isListening ? "text-cyan-200 border-cyan-400" : "text-slate-500"}`} aria-label="Local microphone status">{isListening ? "● LISTENING" : "MIC STANDBY"}</span><button onClick={() => send()} disabled={busy || !input.trim()} className="hud-button disabled:opacity-40">SEND</button></div><div className="text-[10px] text-cyan-700">{isListening ? "ALWAYS LISTENING • WAKE WORD: JARVIS • LOCAL WHISPER" : "LOCAL VOICE COMPANION STARTING"}</div></div>
         </aside>
       </div>
     </div>
