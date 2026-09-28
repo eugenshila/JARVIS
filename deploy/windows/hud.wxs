@@ -20,8 +20,11 @@
       <Component Id="HudExecutable" Guid="*">
         <File Id="HudExe" Source="dist\JARVIS-HUD.exe" />
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\SHILATECH\JARVIS" Name="InstallMarker"
+                       Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
+
     <DirectoryRef Id="APPLICATIONFOLDER">
       <Component Id="AppShortcutComponent" Guid="*">
         <Shortcut Id="AppShortcut" Name="SHILATECH JARVIS" Description="Local Qwen2.5:3B JARVIS HUD with hands-free voice"
@@ -31,6 +34,7 @@
                        Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
+
     <DirectoryRef Id="StartupFolder">
       <Component Id="StartupShortcutComponent" Guid="*">
         <Shortcut Id="StartupShortcut" Name="SHILATECH JARVIS" Description="Start SHILATECH JARVIS after Windows sign-in"
