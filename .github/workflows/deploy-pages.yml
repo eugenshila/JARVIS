@@ -1,4 +1,5 @@
 name: JARVIS GitHub Pages Test
+# Publishes the JARVIS holographic HUD dashboard to GitHub Pages.
 
 on:
   workflow_dispatch:
