@@ -17,7 +17,7 @@
     </Directory>
 
     <DirectoryRef Id="INSTALLFOLDER">
-      <Component Id="HudExecutable" Guid="*">
+      <Component Id="HudExecutable" Guid="2E7F9D5A-7A31-4F61-A5E0-9E9D2E3D8B21">
         <File Id="HudExe" Source="dist\JARVIS-HUD.exe" />
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\SHILATECH\JARVIS" Name="InstallMarker"
