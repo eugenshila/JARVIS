@@ -35,15 +35,15 @@ jobs:
       - name: Install Python packaging requirements
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e . pyinstaller sounddevice numpy
+          python -m pip install -e .[voice] pyinstaller
 
       - name: Package local API, HUD, and clap companion
         shell: pwsh
         run: |
-          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice --collect-all uvicorn src/jarvis/cli/hud_launcher.py
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name JARVIS-HUD --icon assets/icon.ico --add-data "frontend/dist;frontend/dist" --collect-all jarvis --collect-all sounddevice --collect-all faster_whisper --collect-all uvicorn src/jarvis/cli/hud_launcher.py
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path dist/JARVIS-HUD.exe)) { throw "HUD EXE build failed" }
 
-      - name: Install WiX v3
+      - name: Verify voice assets\n        shell: pwsh\n        run: |\n          if (Test-Path voice/jarvis-medium.onnx) { Write-Host "Bundling local JARVIS voice model." } else { Write-Host "No restricted voice model bundled; Piper path remains optional and SAPI fallback is enabled." }\n\n      - name: Install WiX v3
         shell: pwsh
         run: |
           choco install wixtoolset --no-progress -y
