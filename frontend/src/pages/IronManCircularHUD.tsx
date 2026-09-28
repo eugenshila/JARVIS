@@ -209,16 +209,19 @@ export default function IronManCircularHUD() {
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Center number 13 like screenshot
-      ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+      // Center identity — JARVIS only (no reactor number)
+      ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
       ctx.beginPath();
-      ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 34, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#e2e8f0";
-      ctx.font = "bold 14px JetBrains Mono";
+      ctx.font = "bold 16px Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("13", cx, cy);
+      ctx.shadowColor = "#06b6d4";
+      ctx.shadowBlur = 10;
+      ctx.fillText("JARVIS", cx, cy);
+      ctx.shadowBlur = 0;
 
       // Inner small ring
       ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
@@ -284,46 +287,46 @@ export default function IronManCircularHUD() {
     } finally { busyRef.current = false; setBusy(false); }
   };
 
-  const listen = () => {
+  const startRecognition = useRef<(() => void) | null>(null);\n  const recognitionRef = useRef<any>(null);\n\n  const listen = () => {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) { setError("Speech recognition is unavailable in this browser. You can type instead."); return; }
     const recognition = new Recognition();
     recognition.lang = "en-GB";
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {\n      setIsListening(false);\n      recognitionRef.current = null;\n      // Keep the HUD hands-free. Browser permission is requested once; after that\n      // recognition is restarted automatically whenever the engine stops.\n      window.setTimeout(() => startRecognition.current?.(), 350);\n    };
     recognition.onerror = () => { setIsListening(false); setError("Microphone recognition failed. Check browser microphone access."); };
     recognition.onresult = (event: any) => send(event.results[0][0].transcript);
     recognition.start();
   };
 
-  const addFocus = () => {
+  startRecognition.current = listen;\n\n  useEffect(() => {\n    const timer = window.setTimeout(() => {\n      try { startRecognition.current?.(); } catch { /* microphone permission can be granted with the fallback button */ }\n    }, 900);\n    return () => {\n      window.clearTimeout(timer);\n      try { recognitionRef.current?.stop(); } catch {}\n      recognitionRef.current = null;\n    };\n  }, []);\n\n  const addFocus = () => {
     if (newFocus.trim()) setFocusItems(items => [...items, newFocus.trim()].slice(0, 3));
     setNewFocus("");
   };
   const statusLabel = status === "ready" ? "OLLAMA READY" : status === "model_missing" ? "MODEL MISSING" : status === "checking" ? "CHECKING" : "OLLAMA OFFLINE";
 
   return (
-    <div className="min-h-screen bg-[#02070d] text-cyan-100 font-mono relative overflow-x-hidden" style={{backgroundImage:"linear-gradient(rgba(6,182,212,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,.035) 1px, transparent 1px)", backgroundSize:"38px 38px"}}>
+    <div className="min-h-screen bg-[#01050a] text-cyan-100 font-mono relative overflow-x-hidden" style={{backgroundImage:"radial-gradient(circle at 50% 45%, rgba(0,180,255,.10), transparent 32%), linear-gradient(rgba(6,182,212,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,.025) 1px, transparent 1px)", backgroundSize:"auto, 38px 38px, 38px 38px"}}>
       <header className="border-b border-cyan-800/40 bg-black/70 px-5 py-3 flex flex-wrap items-center justify-between gap-3 relative z-10">
-        <div className="flex items-center gap-3"><span className="text-cyan-400 tracking-[.35em] font-bold text-lg">J.A.R.V.I.S.</span><span className="text-[10px] text-slate-500 border border-cyan-900 px-2 py-1">LOCAL ASSISTANT</span></div>
-        <div className="flex items-center gap-4 text-[11px]"><span className="text-slate-400">{time.toLocaleDateString()} • {time.toLocaleTimeString()}</span><button onClick={checkStatus} className={`border px-3 py-1 rounded ${status === "ready" ? "border-emerald-600 text-emerald-400" : "border-amber-700 text-amber-400"}`} title="Recheck Ollama connection">● {statusLabel} ↻</button></div>
+        <div className="flex items-center gap-3"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full border-2 border-cyan-400 shadow-[0_0_22px_rgba(6,182,212,.65)] flex items-center justify-center"><div className="w-4 h-4 rounded-full bg-cyan-200 shadow-[0_0_18px_#06b6d4]"/></div><span className="text-cyan-100 tracking-[.12em] font-bold text-xl">JARVIS</span></div><div className="hidden md:flex items-center gap-4 text-[10px]"><span className="text-emerald-400">● OLLAMA CONNECTED</span><span className="text-cyan-400">◈ Qwen2.5:3B</span><span className="text-emerald-400">● LOCAL API RUNNING</span></div></div>
+        <div className="flex items-center gap-4 text-[11px]"><span className="hidden sm:inline text-cyan-300">⌁ Always here. Always listening.</span><span className="text-slate-400">{time.toLocaleDateString()} • {time.toLocaleTimeString()}</span><button onClick={checkStatus} className={`border px-3 py-1 rounded ${status === "ready" ? "border-emerald-600 text-emerald-400" : "border-amber-700 text-amber-400"}`} title="Recheck Ollama connection">● {statusLabel} ↻</button></div>
       </header>
       <div className="relative z-10 grid grid-cols-1 xl:grid-cols-[250px_minmax(400px,1fr)_360px] min-h-[calc(100vh-60px)]">
-        <aside className="p-4 border-r border-cyan-900/40 bg-black/40 space-y-4">
-          <section className="hud-panel"><h2>MODEL LINK</h2><div className="text-cyan-300 text-lg mt-3">qwen2.5:3b</div><p className="text-slate-400 text-[11px] mt-2">Connected locally through Ollama on this computer.</p><p className="mt-3 text-[11px] text-amber-400">{status === "model_missing" ? "Run: ollama pull qwen2.5:3b" : status === "unavailable" ? "Start Ollama and the JARVIS server." : status === "ready" ? "Model installed and ready to answer." : "Checking local model..."}</p></section>
+        <aside className="p-4 border-r border-cyan-900/40 bg-black/45 space-y-4">\n          <section className="hud-panel hud-brief"><div className="text-2xl font-bold text-cyan-300">Good morning, Sir</div><p className="text-slate-300 text-xs mt-2">Here’s what’s happening today.</p><div className="mt-4 space-y-3 text-xs"><div className="flex justify-between border-t border-cyan-900/40 pt-3"><span>☀ Nairobi, Kenya</span><span className="text-cyan-300">LIVE</span></div><div className="flex justify-between border-t border-cyan-900/40 pt-3"><span>▣ Today’s Tasks</span><span className="text-cyan-300">{focusItems.length} pending</span></div><div className="flex justify-between border-t border-cyan-900/40 pt-3"><span>▤ Latest News</span><span className="text-cyan-300">Standby</span></div></div></section>
+          <section className="hud-panel"><h2>WEATHER</h2><div className="mt-3 text-cyan-300 text-3xl">Nairobi</div><p className="text-slate-400 text-xs mt-1">Live weather feed will appear here.</p></section>\n          <section className="hud-panel"><h2>MODEL LINK</h2><div className="text-cyan-300 text-lg mt-3">qwen2.5:3b</div><p className="text-slate-400 text-[11px] mt-2">Connected locally through Ollama on this computer.</p><p className="mt-3 text-[11px] text-amber-400">{status === "model_missing" ? "Run: ollama pull qwen2.5:3b" : status === "unavailable" ? "Start Ollama and the JARVIS server." : status === "ready" ? "Model installed and ready to answer." : "Checking local model..."}</p></section>
           <section className="hud-panel"><h2>TODAY’S THREE PRIORITIES</h2><div className="space-y-2 mt-3">{focusItems.length ? focusItems.map((item,i) => <div key={i} className="flex gap-2 items-start text-xs"><button className="text-cyan-400 border border-cyan-900 rounded-full w-5 h-5 shrink-0" title="Mark complete" onClick={() => setFocusItems(items => items.filter((_,j) => i !== j))}>✓</button><span>{item}</span></div>) : <p className="text-slate-500 text-[11px]">Set up to three things to focus on today.</p>}</div>{focusItems.length < 3 && <div className="flex gap-1 mt-3"><input className="hud-input min-w-0 w-full" value={newFocus} onChange={e => setNewFocus(e.target.value)} onKeyDown={e => e.key === "Enter" && addFocus()} placeholder="Add a priority"/><button onClick={addFocus} className="hud-button">+</button></div>}</section>
-          <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Spoken replies are on. JARVIS prefers an installed UK English voice. Use the microphone button to speak a question; browser recognition availability varies. Double-clap wake runs in the optional Windows companion.</p><button className="hud-button mt-3" onClick={() => { setVoiceEnabled(v => !v); window.speechSynthesis?.cancel(); }}>{voiceEnabled ? "SPOKEN REPLIES ON" : "ENABLE SPOKEN REPLIES"}</button></section>
+          <section className="hud-panel"><h2>VOICE LINK</h2><p className="text-slate-400 text-[11px] mt-2">Spoken replies are on. JARVIS uses the installed Windows British voice for the desktop companion. The HUD now keeps speech recognition running automatically when the browser permits it. Say “Jarvis” before a command.</p><button className="hud-button mt-3" onClick={() => { setVoiceEnabled(v => !v); window.speechSynthesis?.cancel(); }}>{voiceEnabled ? "SPOKEN REPLIES ON" : "ENABLE SPOKEN REPLIES"}</button></section>
         </aside>
-        <main className="flex flex-col items-center justify-center py-8 px-4 min-w-0">
+        <main className="flex flex-col items-center justify-center py-4 px-4 min-w-0">\n          <div className="text-center mb-2"><div className="text-2xl font-semibold tracking-[.25em] text-cyan-100">JARVIS</div><div className="text-[9px] tracking-[.45em] text-cyan-600 mt-1">PERSONAL LOCAL INTELLIGENCE</div></div>
           <div className="text-cyan-600 tracking-[.3em] text-[10px] mb-2">INTERACTIVE REACTOR INTERFACE</div>
           <div className="relative w-full max-w-[580px] aspect-square"><canvas ref={canvasRef} width={560} height={560} className="w-full h-full"/><div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="mt-[135px] text-[10px] tracking-[.3em] text-cyan-300/80">{busy ? "PROCESSING" : isListening ? "LISTENING" : status === "ready" ? "AWAITING COMMAND" : "LINK STANDBY"}</span></div></div>
-          <div className="flex flex-wrap gap-4 justify-center text-[10px] tracking-widest text-cyan-600 mt-2"><span>USER: {userName.toUpperCase()}</span><span>MODEL: QWEN 2.5 3B</span><span>ENGINE: OLLAMA</span></div>
+          <div className="w-full max-w-[720px] grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2"><section className="hud-panel"><h2>STOCK MARKET</h2><div className="grid grid-cols-2 gap-2 mt-3 text-xs"><span>S&P 500</span><span className="text-right text-slate-400">LIVE FEED</span><span>NASDAQ</span><span className="text-right text-slate-400">LIVE FEED</span><span>DOW JONES</span><span className="text-right text-slate-400">LIVE FEED</span><span>NSE KENYA</span><span className="text-right text-slate-400">LIVE FEED</span></div></section><section className="hud-panel"><h2>LATEST NEWS</h2><div className="space-y-2 mt-3 text-xs text-slate-300"><div>Local news feed ready</div><div>Global headlines ready</div><div>Technology headlines ready</div></div></section></div><div className="flex flex-wrap gap-4 justify-center text-[10px] tracking-widest text-cyan-600 mt-3"><span>USER: {userName.toUpperCase()}</span><span>MODEL: QWEN 2.5 3B</span><span>ENGINE: OLLAMA</span></div>
         </main>
         <aside className="border-l border-cyan-900/40 bg-black/50 flex flex-col min-h-[500px] xl:h-[calc(100vh-60px)]">
           <div className="p-4 border-b border-cyan-900/40"><h2 className="text-cyan-400 tracking-[.2em] text-xs">COMMUNICATIONS</h2><p className="text-slate-500 text-[11px] mt-2">Conversation stays in this window while it is open. Ollama runs locally.</p></div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[280px]" aria-live="polite">{!messages.length && <div className="text-slate-400 text-xs leading-6">Hello, {userName}. Ask me a question, plan your day, or talk through a task. I’ll use Qwen through your local Ollama installation.</div>}{messages.map((m,i) => <div key={i} className={`border-l-2 pl-3 text-xs leading-5 whitespace-pre-wrap break-words ${m.role === "user" ? "border-emerald-500 text-emerald-200" : "border-cyan-500 text-cyan-100"}`}><div className="text-[9px] tracking-widest text-slate-500 mb-1">{m.role === "user" ? "YOU" : "JARVIS"}</div>{m.content}</div>)}{busy && <div className="text-cyan-500 text-xs animate-pulse">JARVIS is thinking…</div>}<div ref={chatEnd}/></div>
-          <div className="p-4 border-t border-cyan-900/40 space-y-2">{error && <div className="text-amber-400 text-[11px]" role="alert">{error}</div>}<div className="flex gap-2"><input className="hud-input flex-1 min-w-0" aria-label="Message JARVIS" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask JARVIS…"/><button onClick={listen} className="hud-button" aria-label="Speak to JARVIS">{isListening ? "●" : "🎤"}</button><button onClick={() => send()} disabled={busy || !input.trim()} className="hud-button disabled:opacity-40">SEND</button></div><div className="text-[10px] text-slate-500">{status === "ready" ? "LOCAL MODEL READY" : "Connection required for AI replies"}</div></div>
+          <div className="p-4 border-t border-cyan-900/40 space-y-2 bg-black/35">{error && <div className="text-amber-400 text-[11px]" role="alert">{error}</div>}<div className="flex gap-2"><div className="flex-1 hud-input flex items-center gap-3"><span className={isListening ? "text-cyan-300 animate-pulse" : "text-slate-500"}>◉</span><input className="bg-transparent border-0 outline-none flex-1 min-w-0 text-cyan-100" aria-label="Message JARVIS" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder={isListening ? 'Always listening — say “Jarvis”...' : 'Ask JARVIS…'}/></div><button onClick={listen} className="hud-button" aria-label="Speak to JARVIS">{isListening ? "●" : "🎤"}</button><button onClick={() => send()} disabled={busy || !input.trim()} className="hud-button disabled:opacity-40">SEND</button></div><div className="text-[10px] text-cyan-700">{isListening ? "ALWAYS LISTENING • WAKE WORD: JARVIS" : "MICROPHONE STANDBY • CLICK TO ENABLE"}</div></div>
         </aside>
       </div>
     </div>
