@@ -345,6 +345,11 @@ export default function IronManHUD() {
           const voices = speechSynthesis.getVoices()
           const british = voices.find(v=> v.name.toLowerCase().includes('british') || v.name.toLowerCase().includes('uk'))
           if (british) utter.voice = british
+          utter.onend = () => {
+            if (handsFreeRef.current && !loading) {
+              setTimeout(() => startVoice(true), 250)
+            }
+          }
           speechSynthesis.speak(utter)
         }
       } catch {}
