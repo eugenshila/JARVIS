@@ -42,18 +42,27 @@ def _piper_paths():
 def piper_available() -> bool:
     exe,model,_=_piper_paths(); return exe is not None and model is not None
 
-def _powershell_speak(text:str)->None:
-    clean=(text or "").replace("'","''"); rate=int(os.environ.get("JARVIS_VOICE_RATE","-1")); volume=int(os.environ.get("JARVIS_VOICE_VOLUME","100"))
-    script=("Add-Type -AssemblyName System.Speech; "
-            "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-            "$voices=$s.GetInstalledVoices(); "
-            "$preferred=@('Microsoft George','George','Microsoft Ryan','Ryan','Microsoft David','David'); "
-            "$chosen=$null; foreach($p in $preferred){$chosen=$voices | Where-Object {$_.VoiceInfo.Name -eq $p} | Select-Object -First 1; if($chosen){break}}; "
-            "if($chosen){$s.SelectVoice($chosen.VoiceInfo.Name)}; "
-            f"$s.Rate={rate}; $s.Volume={volume}; $s.Speak('{clean}')"")
-    # PowerShell does not interpret the Python f-string above; build the final command explicitly.
-    script=script.replace('f"$s.Speak(', '$s.Speak(').replace('')"+")','')')
-    subprocess.run(["powershell","-NoProfile","-Command",script],timeout=60,check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+def _powershell_speak(text: str) -> None:
+    clean = (text or "").replace("'", "''")
+    rate = int(os.environ.get("JARVIS_VOICE_RATE", "-1"))
+    volume = int(os.environ.get("JARVIS_VOICE_VOLUME", "100"))
+    script = (
+        "Add-Type -AssemblyName System.Speech; "
+        "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        "$voices=$s.GetInstalledVoices(); "
+        "$preferred=@('Microsoft George','George','Microsoft Ryan','Ryan','Microsoft David','David'); "
+        "$chosen=$null; "
+        "foreach($p in $preferred){$chosen=$voices | Where-Object {$_.VoiceInfo.Name -eq $p} | Select-Object -First 1; if($chosen){break}}; "
+        "if($chosen){$s.SelectVoice($chosen.VoiceInfo.Name)}; "
+        f"$s.Rate={rate}; $s.Volume={volume}; $s.Speak('{clean}')"
+    )
+    subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        timeout=60,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 def _piper_speak(text:str)->None:
     exe,model,config=_piper_paths()
