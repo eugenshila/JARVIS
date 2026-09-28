@@ -43,27 +43,12 @@ class DoubleClap:
 
 
 def speak(text: str) -> None:
-    if sys.platform != "win32":
-        return
-    escaped = text.replace("'", "''")
-    script = (
-        "Add-Type -AssemblyName System.Speech; "
-        "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-        "$v=$s.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -eq 'en-GB' } | "
-        "Select-Object -First 1; if($v){$s.SelectVoice($v.VoiceInfo.Name)}; "
-        f"$s.Speak('{escaped}')"
-    )
+    """Speak using the shared British JARVIS-inspired Windows voice."""
     try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-Command", script],
-            timeout=25,
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+        from jarvis.voice import speak as jarvis_speak
+        jarvis_speak(text, asynchronous=False)
+    except Exception:
         pass
-
 
 def startup_path() -> Path:
     appdata = os.environ.get("APPDATA")
