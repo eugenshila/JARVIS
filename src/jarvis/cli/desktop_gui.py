@@ -102,8 +102,19 @@ def _start_server(frontend: Path):
     import uvicorn
 
     port = _free_port()
+    # Do not let Uvicorn apply its default dictConfig here.  In the frozen
+    # Windows desktop build that configuration references
+    # ``uvicorn.logging.DefaultFormatter``; PyInstaller can omit that module,
+    # which makes startup fail with: "Unable to configure formatter 'default'."
+    # The desktop launcher already has its own file logger, and access logs are
+    # disabled, so Uvicorn's logging configuration is unnecessary.
     config = uvicorn.Config(
-        create_app(frontend), host=HOST, port=port, log_level="warning", access_log=False
+        create_app(frontend),
+        host=HOST,
+        port=port,
+        log_level="warning",
+        access_log=False,
+        log_config=None,
     )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, name="jarvis-local-server", daemon=True)
