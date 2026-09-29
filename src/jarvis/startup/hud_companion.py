@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse,json,os,sys,time,urllib.request
 from collections import deque
 from pathlib import Path
-from jarvis.voice import speak,write_voice_status
+from jarvis.voice import available_voice, speak, write_voice_status
 
 HUD_URL=os.environ.get("JARVIS_HUD_URL","http://127.0.0.1:8765")
 STARTUP_NAME="JARVIS-HUD.bat"
@@ -34,6 +34,21 @@ def startup_path()->Path:
 def install_startup(launcher:Path)->Path:
     if not launcher.is_file(): raise FileNotFoundError(launcher)
     destination=startup_path(); destination.parent.mkdir(parents=True,exist_ok=True); destination.write_text(f'@echo off\r\ncall "{launcher.resolve()}"\r\n',encoding="utf-8"); return destination
+
+def _whisper_model_name() -> str:
+    configured = os.environ.get("JARVIS_WHISPER_MODEL")
+    if configured:
+        return configured
+    # CI places a small offline model beside the frozen executable. Without
+    # it faster-whisper tries to download on first launch, which made voice
+    # appear dead on machines with no Hugging Face access.
+    bundled_root = getattr(sys, "_MEIPASS", None)
+    if bundled_root:
+        bundled = Path(bundled_root) / "whisper-model"
+        if (bundled / "model.bin").is_file():
+            return str(bundled)
+    return "base.en"
+
 
 def _transcribe(model,samples,np)->str:
     if float(np.max(np.abs(samples)))<float(os.environ.get("JARVIS_AUDIO_THRESHOLD","0.012")): return ""
@@ -73,14 +88,23 @@ def _handle_command(command:str)->None:
         print(f"Voice error: {exc}",file=sys.stderr,flush=True); write_voice_status(state="error",listening=False,transcript=command,response=str(exc),event_id=int(time.time_ns()//1_000_000)); speak("I encountered a local voice system error, Sir.",asynchronous=False)
 
 def listen_for_hands_free()->None:
+    write_voice_status(state="starting",listening=False,response="",transcript="",voice=available_voice(),error="")
     try:
         import numpy as np
         import sounddevice as sd
         from faster_whisper import WhisperModel
-    except ImportError as exc: raise RuntimeError("Install voice support: pip install -e .[voice]") from exc
-    model=WhisperModel(os.environ.get("JARVIS_WHISPER_MODEL","base.en"),device=os.environ.get("JARVIS_WHISPER_DEVICE","cpu"),compute_type=os.environ.get("JARVIS_WHISPER_COMPUTE","int8"))
+    except ImportError as exc:
+        message="Voice dependencies are missing: " + str(exc)
+        write_voice_status(state="error",listening=False,error=message,voice=available_voice())
+        raise RuntimeError(message) from exc
+    try:
+        model=WhisperModel(_whisper_model_name(),device=os.environ.get("JARVIS_WHISPER_DEVICE","cpu"),compute_type=os.environ.get("JARVIS_WHISPER_COMPUTE","int8"))
+    except Exception as exc:
+        message=f"Whisper model could not start: {type(exc).__name__}: {exc}"
+        write_voice_status(state="error",listening=False,error=message,voice=available_voice())
+        raise RuntimeError(message) from exc
     sample_rate=16000; standby_samples=int(sample_rate*float(os.environ.get("JARVIS_WAKE_WINDOW_SECONDS","2.0"))); buffer=deque(maxlen=standby_samples); detector=DoubleClap(float(os.environ.get("JARVIS_CLAP_THRESHOLD","0.18")))
-    write_voice_status(state="standby",listening=True,response="",transcript="",voice="auto"); speak("JARVIS online. Hands-free voice control is ready, Sir.",asynchronous=False)
+    write_voice_status(state="standby",listening=True,response="",transcript="",voice=available_voice(),error=""); speak("JARVIS online. Hands-free voice control is ready, Sir.",asynchronous=False)
     with sd.InputStream(channels=1,samplerate=sample_rate,blocksize=1600) as microphone:
         while True:
             samples,overflowed=microphone.read(1600)
