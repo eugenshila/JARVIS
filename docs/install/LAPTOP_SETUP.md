@@ -255,8 +255,8 @@ jarvis chat --engine ollama
 ```powershell
 # Install WiX Toolset from https://wixtoolset.org/releases/
 # Then:
-.\deploy\windows\build_msi.ps1 -Version 0.2.0
-# Output: dist/JARVIS-0.2.0-x64.msi
+.\deploy\windows\build_msi.ps1 -Version 0.2.1
+# Output: dist/JARVIS-0.2.1-x64.msi
 ```
 
 ### macOS (Intel or Apple Silicon)

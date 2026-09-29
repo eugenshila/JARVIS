@@ -27,6 +27,9 @@ def test_canonical_installer_is_opt_in_for_startup():
 
     assert "jarvis-desktop.exe" in wix
     assert "MajorUpgrade" in wix
+    # A rebuilt MSI with the same ProductVersion must replace the existing
+    # install instead of creating a second side-by-side product.
+    assert 'AllowSameVersionUpgrades="yes"' in wix
     assert "CurrentVersion\\Run" not in wix
     assert 'Component Id="AutoStart"' not in wix
 

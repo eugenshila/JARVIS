@@ -27,7 +27,7 @@ from jarvis.engine.registry import get_engine, list_engines
 from jarvis.memory.store import MemoryStore
 from jarvis.skills.registry import SkillRegistry
 from jarvis.telemetry.monitor import TelemetryStore
-from jarvis.voice import read_voice_status, available_voice
+from jarvis.voice import available_voice, read_voice_status, speak
 
 
 app = FastAPI(title="JARVIS API", version=__version__, description="Personal AI, On Personal Devices")
@@ -68,6 +68,10 @@ HUD_MODEL = "qwen2.5:3b"
 class HudMessage(BaseModel):
     role: str
     content: str
+
+
+class HudSpeakRequest(BaseModel):
+    text: str
 
 
 class HudChatRequest(BaseModel):
@@ -159,6 +163,16 @@ async def hud_voice_status():
     status = await asyncio.to_thread(read_voice_status)
     status["voice_name"] = available_voice()
     return status
+
+
+@app.post("/hud/speak")
+async def hud_speak(request: HudSpeakRequest):
+    """Speak dashboard previews through the packaged local voice."""
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    await asyncio.to_thread(speak, text, False)
+    return {"ok": True, "voice_name": available_voice()}
 
 
 def _safe_json(path: Path, default: Any) -> Any:
@@ -702,4 +716,11 @@ def serve_cli():
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
-    uvicorn.run("jarvis.server.api:app", host=args.host, port=args.port, reload=args.reload)
+    # Keep the packaged server independent of Uvicorn's formatter config lookup.
+    uvicorn.run(
+        "jarvis.server.api:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+        log_config=None,
+    )

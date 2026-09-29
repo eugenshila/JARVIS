@@ -404,9 +404,23 @@ export default function JarvisDashboard() {
       window.speechSynthesis.speak(u)
     } catch { setSpeaking(false) }
   }
-  const playClip = (file: string, fallback: string) => {
+  const playClip = async (file: string, fallback: string) => {
+    // The installed HUD should use the same bundled Piper voice as Boot + Voice,
+    // not the old static MP3 samples. GitHub Pages has no local API, so retain
+    // the browser/audio fallback for the public preview.
     try { audioRef.current?.pause() } catch {}
     setSpeaking(true)
+    try {
+      const response = await fetch('/hud/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: fallback }),
+      })
+      if (response.ok) {
+        setSpeaking(false)
+        return
+      }
+    } catch {}
     const a = new Audio(file)
     audioRef.current = a
     let fell = false

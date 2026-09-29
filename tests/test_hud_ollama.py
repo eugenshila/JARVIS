@@ -27,3 +27,15 @@ def test_hud_status_reports_missing_model(monkeypatch):
     monkeypatch.setattr(api, "_ollama_request", lambda path, payload=None: {"models": [{"name": "llama3.2:3b"}]})
     response = TestClient(api.app).get("/hud/status")
     assert response.json()["ollama"] == "model_missing"
+
+
+def test_hud_speak_uses_packaged_local_voice(monkeypatch):
+    spoken = {}
+    monkeypatch.setattr(api, "speak", lambda text, asynchronous=False: spoken.update(text=text, asynchronous=asynchronous))
+    monkeypatch.setattr(api, "available_voice", lambda: "Piper neural voice")
+
+    response = TestClient(api.app).post("/hud/speak", json={"text": "Voice check"})
+
+    assert response.status_code == 200
+    assert spoken == {"text": "Voice check", "asynchronous": False}
+    assert response.json()["voice_name"] == "Piper neural voice"
