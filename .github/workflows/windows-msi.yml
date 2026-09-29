@@ -142,7 +142,9 @@ jobs:
           if-no-files-found: error
 
       - name: Publish replacement GitHub Release
-        if: github.event_name == 'workflow_dispatch'
+        # PR #10 is the one-off replacement build for the already-installed
+        # defective 0.2.0 MSI; normal pull-request builds remain artifact-only.
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 10)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
