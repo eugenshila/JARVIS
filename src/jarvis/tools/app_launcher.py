@@ -15,6 +15,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from jarvis.core import confirm as confirm_gate
+
 from jarvis.core.config import get_home
 from jarvis.tools.base import BaseTool, ToolSpec
 
@@ -222,7 +224,7 @@ Safety rules:
             return f"No app named '{app}' was in the allow-list."
         return f"Removed '{app}' from the app allow-list."
 
-    def launch_app(self, app: str, args: str = "", confirm: bool = False) -> str:
+    def launch_app(self, app: str, args: str = "", confirm: bool = False, **kwargs) -> str:
         if not app.strip():
             return "Which app should I open, Sir? Use `jarvis apps --list` to see approved apps."
         record = self._find_app(app)
@@ -231,8 +233,25 @@ Safety rules:
                 f"'{app}' is not approved yet. Add it first with `jarvis apps --add --name {app} --path <installed app path>`. "
                 "I will not run arbitrary commands from chat."
             )
+        # `confirm` is a tool parameter, which means the MODEL writes it — it is
+        # not evidence a human agreed. It is still honoured for the CLI
+        # (`jarvis apps --launch X --yes`), which is a real human at a real
+        # keyboard, but a model-driven call now goes through the interface gate
+        # in jarvis/core/confirm.py instead.
         if not confirm:
-            return f"Confirm required before launching {record['name']}. Run again with confirm=true or `jarvis apps --launch {record['name']} --yes`."
+            pending = confirm_gate.request(
+                title=f"Launch {record['name']}",
+                detail=str(record.get("path", "")),
+                run=lambda: self._launch_now(record, args),
+            )
+            return (
+                f"Awaiting your confirmation to launch {record['name']} "
+                f"(token {pending.token[:8]}…). Or run "
+                f"`jarvis apps --launch {record['name']} --yes`."
+            )
+        return self._launch_now(record, args)
+
+    def _launch_now(self, record: dict, args: str = "") -> str:
 
         p = Path(record["path"]).expanduser()
         if not p.exists() or not _is_safe_app_path(p):

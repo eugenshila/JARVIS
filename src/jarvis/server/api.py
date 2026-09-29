@@ -6,14 +6,15 @@ import asyncio
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
-import time
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,10 +28,20 @@ from jarvis.engine.registry import get_engine, list_engines
 from jarvis.memory.store import MemoryStore
 from jarvis.skills.registry import SkillRegistry
 from jarvis.telemetry.monitor import TelemetryStore
-from jarvis.voice import read_voice_status, available_voice
+from jarvis.voice import available_voice, read_voice_status
 
+#: Upload ceiling. Large enough for a video, small enough that a stray loop
+#: cannot fill the user's disk.
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
 app = FastAPI(title="JARVIS API", version=__version__, description="Personal AI, On Personal Devices")
+
+# Authentication. Loopback callers are exempt by default so the CLI, the
+# desktop shell and existing local workflows are unchanged; a request from off
+# the machine needs the token from `jarvis token`. See jarvis/server/auth.py.
+from jarvis.server import auth as api_auth  # noqa: E402
+
+api_auth.install(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -509,6 +520,243 @@ def health():
     return {"status": "ok", "version": __version__, "time": time.time()}
 
 
+# ── Confirmation gate ─────────────────────────────────────────────────────────
+#
+# These endpoints are the *interface* half of jarvis/core/confirm.py. The model
+# can never reach them: it only produces tool arguments, and no tool argument
+# resolves a token. A human clicking CONFIRM in the HUD is what calls
+# /confirm/{token}/approve.
+
+
+class ConfirmAction(BaseModel):
+    token: str
+
+
+@app.get("/confirm")
+def confirm_pending():
+    from jarvis.core import confirm as confirm_gate
+
+    return {"pending": confirm_gate.pending()}
+
+
+@app.post("/confirm/{token}/approve")
+def confirm_approve(token: str):
+    from jarvis.core import confirm as confirm_gate
+
+    try:
+        result = confirm_gate.resolve(token)
+    except confirm_gate.ConfirmationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Action failed: {exc}") from exc
+    return {"status": "done", "result": result}
+
+
+@app.post("/confirm/{token}/cancel")
+def confirm_cancel(token: str):
+    from jarvis.core import confirm as confirm_gate
+
+    if not confirm_gate.cancel(token):
+        raise HTTPException(status_code=404, detail="No such pending confirmation.")
+    return {"status": "cancelled"}
+
+
+# ── Undo ──────────────────────────────────────────────────────────────────────
+
+
+@app.get("/undo")
+def undo_history():
+    from jarvis.core import undo as undo_stack
+
+    return {"history": undo_stack.history(), "depth": undo_stack.depth()}
+
+
+@app.post("/undo")
+def undo_last():
+    from jarvis.core import undo as undo_stack
+
+    return {"result": undo_stack.undo_last(), "depth": undo_stack.depth()}
+
+
+# ── Engine ladder + tool discovery diagnostics ────────────────────────────────
+
+
+@app.get("/ladder")
+def ladder_status():
+    from jarvis.engine.ladder import status as ladder_state
+
+    return ladder_state()
+
+
+@app.get("/tools")
+def tools_listing():
+    from jarvis.tools.registry import list_tool_details
+
+    return {"tools": list_tool_details()}
+
+
+# ── Plan / execute / background tasks ─────────────────────────────────────────
+
+
+class GoalRequest(BaseModel):
+    goal: str
+    tools: list[str] | None = None
+    priority: str = "normal"
+
+
+@app.post("/plan")
+def build_plan(req: GoalRequest):
+    """Plan a goal WITHOUT running it, so the user can see it first."""
+    from jarvis.agents.planner import plan as make_plan
+
+    return make_plan(req.goal, tools=req.tools).to_dict()
+
+
+@app.post("/tasks")
+def submit_task(req: GoalRequest):
+    """Plan and run a goal on the background queue. Returns immediately."""
+    from jarvis.agents.executor import submit_goal
+    from jarvis.core.task_queue import Priority
+
+    priority = {
+        "high": Priority.HIGH,
+        "normal": Priority.NORMAL,
+        "low": Priority.LOW,
+    }.get(req.priority.strip().lower(), Priority.NORMAL)
+    task = submit_goal(req.goal, tools=req.tools, priority=priority)
+    return task.to_dict()
+
+
+@app.get("/tasks")
+def list_tasks():
+    from jarvis.core.task_queue import get_queue
+
+    return get_queue().snapshot()
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: str):
+    from jarvis.core.task_queue import get_queue
+
+    task = get_queue().get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="No such task.")
+    return task.to_dict()
+
+
+@app.delete("/tasks/{task_id}")
+def cancel_task(task_id: str):
+    from jarvis.core.task_queue import get_queue
+
+    if not get_queue().cancel(task_id):
+        raise HTTPException(status_code=404, detail="No such task, or it already finished.")
+    return {"status": "cancelling", "task_id": task_id}
+
+
+@app.get("/capture")
+def capture_status():
+    from jarvis.core import capture as capture_core
+
+    return capture_core.status()
+
+
+@app.post("/capture/screen")
+def capture_screen_now(analyse: bool = False, question: str = "Describe what is on the screen."):
+    """Take one screen grab. Refused unless the user has granted consent."""
+    from jarvis.core import capture as capture_core
+
+    try:
+        shot = capture_core.capture_screen()
+    except capture_core.CaptureError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    payload = {
+        "path": str(shot.path),
+        "width": shot.width,
+        "height": shot.height,
+        "bytes": shot.bytes_written,
+    }
+    if analyse:
+        from jarvis.tools.capture_tools import _describe
+
+        payload["description"] = _describe(str(shot.path), question)
+    return payload
+
+
+# Uploads need python-multipart. It is a declared dependency, but a minimal
+# or partially-installed environment must lose the upload route, not the
+# whole API.
+try:
+    import importlib.util as _importlib_util
+
+    _UPLOADS_OK = any(
+        _importlib_util.find_spec(name) is not None
+        for name in ("python_multipart", "multipart")
+    )
+except (ImportError, ValueError):  # pragma: no cover - depends on the install
+    _UPLOADS_OK = False
+
+
+def _register_upload_route() -> None:
+    @app.post("/upload")
+    async def upload_file(file: UploadFile = File(...)):  # noqa: B008
+        """Accept a file and report what can be done with it.
+
+        Lands in the first genuinely writable directory of the fallback chain in
+        jarvis/core/paths.py — 'write next to the executable' fails on a real
+        install where Program Files is read-only.
+        """
+        from jarvis.core.paths import uploads_dir
+        from jarvis.tools.file_processor import detect_type, supported_actions
+
+        safe_name = Path(str(file.filename or "upload")).name
+        destination = uploads_dir() / safe_name
+        size = 0
+        try:
+            with destination.open("wb") as handle:
+                while chunk := await file.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > MAX_UPLOAD_BYTES:
+                        handle.close()
+                        destination.unlink(missing_ok=True)
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"File exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+                        )
+                    handle.write(chunk)
+        except HTTPException:
+            raise
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not save upload: {exc}") from exc
+
+        return {
+            "path": str(destination),
+            "name": safe_name,
+            "bytes": size,
+            "type": detect_type(destination),
+            "actions": supported_actions(str(destination)),
+        }
+
+
+
+if _UPLOADS_OK:
+    _register_upload_route()
+
+
+@app.get("/monitors")
+def list_monitors():
+    from jarvis.tools.monitor_tools import due_topics, load_monitors
+
+    return {"monitors": load_monitors(), "due": due_topics()}
+
+
+@app.get("/profile")
+def get_profile_facts():
+    from jarvis.memory.profile import get_profile
+
+    profile = get_profile()
+    return {"profile": profile.all(), "size": profile.size()}
+
+
 @app.get("/v1/models")
 def list_models():
     cfg = JarvisConfig.load()
@@ -693,8 +941,9 @@ if _frontend.joinpath("index.html").exists():
 
 def serve_cli():
     """Entry point for jarvis-server command."""
-    import uvicorn
     import argparse
+
+    import uvicorn
 
     parser = argparse.ArgumentParser(description="JARVIS API Server")
     parser.add_argument("--host", default="0.0.0.0")

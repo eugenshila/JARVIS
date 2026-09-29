@@ -1,305 +1,94 @@
-"""Tool registry — now with hybrid search, FAISS memory, Tavily, DDGS, Iron Man devices, vision, wakeword."""
+"""Tool registry — thin facade over directory-based discovery.
+
+This file used to be a hand-maintained import list: ~20 ``try/except
+ImportError`` blocks and a dict literal naming every tool class twice. Adding
+a tool meant editing it, and forgetting to meant the tool silently did not
+exist.
+
+Now :mod:`jarvis.tools.discovery` scans the package and any user plugins in
+``~/.jarvis/plugins/``; this module only keeps the public API stable
+(:func:`get_tool`, :func:`list_tools`, :func:`get_tools`, ``REGISTRY``) and
+declares the historical aliases.
+"""
 
 from __future__ import annotations
 
+from typing import Any
+from collections.abc import Mapping
+
 from jarvis.tools.base import BaseTool
-from jarvis.tools.builtins import (
-    CalendarTool,
-    FileReadTool,
-    FileWriteTool,
-    GmailTool,
-    MemorySearchTool,
-    MemoryWriteTool,
-    ShellTool,
-    WebSearchTool,
+from jarvis.tools.discovery import (
+    format_problems,
+    get_registry,
+    is_enabled,
+    set_enabled,
 )
 
-# Try import enhanced tools, fallback to builtins if missing deps
-try:
-    from jarvis.tools.search_tools import DDGSearchTool, HybridSearchTool, TavilySearchTool
-    HAS_ENHANCED_SEARCH = True
-except ImportError:
-    HAS_ENHANCED_SEARCH = False
-    HybridSearchTool = WebSearchTool  # type: ignore
-    TavilySearchTool = WebSearchTool  # type: ignore
-    DDGSearchTool = WebSearchTool  # type: ignore
-
-try:
-    from jarvis.tools.device_tools import LightsTool, MusicTool, ProjectTool, SystemTool
-    HAS_DEVICE_TOOLS = True
-except ImportError:
-    HAS_DEVICE_TOOLS = False
-
-try:
-    from jarvis.tools.vision_tool import VisionTool
-    HAS_VISION = True
-except ImportError:
-    HAS_VISION = False
-
-try:
-    from jarvis.tools.wakeword_tool import WakeWordTool
-    HAS_WAKEWORD = True
-except ImportError:
-    HAS_WAKEWORD = False
-
-try:
-    from jarvis.tools.adhd_tools import (
-        BrainDumpTool,
-        DayPlannerTool,
-        DistractionLogTool,
-        EnergyCheckTool,
-        FocusTool,
-        OverwhelmTool,
-        QuickCaptureTool,
-        TaskBreakdownTool,
-        TimeEstimatorTool,
-        WinTrackerTool,
-    )
-    HAS_ADHD_TOOLS = True
-except ImportError:
-    HAS_ADHD_TOOLS = False
-
-try:
-    from jarvis.tools.adhd_advanced import (
-        DopamineMenuTool,
-        HabitStackTool,
-        IfThenTool,
-        ShutdownRitualTool,
-        TransitionTool,
-        WeeklyReviewTool,
-    )
-    HAS_ADHD_ADVANCED = True
-except ImportError:
-    HAS_ADHD_ADVANCED = False
-
-try:
-    from jarvis.tools.startup_tools import AutostartTool, GreetingTool, TaskAlignmentTool
-    HAS_STARTUP = True
-except ImportError:
-    HAS_STARTUP = False
-
-try:
-    from jarvis.tools.adhd_state import ADHDStateTool
-    HAS_ADHD_STATE = True
-except ImportError:
-    HAS_ADHD_STATE = False
-
-try:
-    from jarvis.tools.app_launcher import AppLauncherTool
-    HAS_APP_LAUNCHER = True
-except ImportError:
-    HAS_APP_LAUNCHER = False
-
-try:
-    from jarvis.tools.connection_tools import ConnectionStatusTool
-    HAS_CONNECTIONS = True
-except ImportError:
-    HAS_CONNECTIONS = False
-
-try:
-    from jarvis.tools.career_tools import CareerTool
-    HAS_CAREER = True
-except ImportError:
-    HAS_CAREER = False
-
-try:
-    from jarvis.tools.income_tools import (
-        IncomeOpportunitiesTool,
-        InvestmentResearchTool,
-        IncomeProjectsTool,
-        MoneyBriefingTool,
-    )
-    HAS_INCOME = True
-except ImportError:
-    HAS_INCOME = False
-
-
-REGISTRY: dict[str, type[BaseTool]] = {
-    "file_read": FileReadTool,
-    "file_write": FileWriteTool,
-    "shell": ShellTool,
-    "code_exec": ShellTool,
-    "web_search": HybridSearchTool if HAS_ENHANCED_SEARCH else WebSearchTool,
-    "tavily_search": TavilySearchTool if HAS_ENHANCED_SEARCH else WebSearchTool,
-    "ddgs_search": DDGSearchTool if HAS_ENHANCED_SEARCH else WebSearchTool,
-    "memory_search": MemorySearchTool,
-    "memory_write": MemoryWriteTool,
-    "calendar": CalendarTool,
-    "gmail": GmailTool,
+#: Extra names that must keep resolving, for callers and agent presets that
+#: were written against the old hand-maintained table.
+ALIASES: dict[str, str] = {
+    "code_exec": "shell",
+    "career": "career_os",
+    "online_status": "network_status",
+    "search": "web_search",
+    "memory": "memory_search",
 }
 
-if HAS_DEVICE_TOOLS:
-    REGISTRY.update({
-        "lights": LightsTool,
-        "music": MusicTool,
-        "system": SystemTool,
-        "project": ProjectTool,
-    })
 
-if HAS_VISION:
-    REGISTRY["vision"] = VisionTool
+def _registry():
+    reg = get_registry()
+    for alias, target in ALIASES.items():
+        if alias not in reg.tools:
+            reg.alias(alias, target)
+    return reg
 
-if HAS_WAKEWORD:
-    REGISTRY["wakeword"] = WakeWordTool
 
-if HAS_ADHD_TOOLS:
-    REGISTRY.update({
-        "brain_dump": BrainDumpTool,
-        "task_breakdown": TaskBreakdownTool,
-        "day_planner": DayPlannerTool,
-        "focus": FocusTool,
-        "quick_capture": QuickCaptureTool,
-        "energy_check": EnergyCheckTool,
-        "win_tracker": WinTrackerTool,
-        "overwhelm": OverwhelmTool,
-        "time_estimator": TimeEstimatorTool,
-        "distraction_log": DistractionLogTool,
-    })
+class _RegistryView(Mapping[str, type]):
+    """Back-compat: ``REGISTRY`` used to be a ``dict[str, type[BaseTool]]``.
 
-if HAS_ADHD_ADVANCED:
-    REGISTRY.update({
-        "habit_stack": HabitStackTool,
-        "transition": TransitionTool,
-        "if_then": IfThenTool,
-        "weekly_review": WeeklyReviewTool,
-        "dopamine_menu": DopamineMenuTool,
-        "shutdown_ritual": ShutdownRitualTool,
-    })
+    Kept as a live read-only view so existing ``REGISTRY[name]`` /
+    ``name in REGISTRY`` / ``REGISTRY.keys()`` callers keep working, but it now
+    reflects discovery instead of a frozen literal.
+    """
 
-if HAS_STARTUP:
-    REGISTRY.update({
-        "autostart": AutostartTool,
-        "greeting": GreetingTool,
-        "task_alignment": TaskAlignmentTool,
-    })
+    def _classes(self) -> dict[str, type]:
+        reg = _registry()
+        out = {name: rec.cls for name, rec in reg.tools.items() if rec.cls}
+        for alias, target in reg.aliases.items():
+            rec = reg.tools.get(target)
+            if rec and rec.cls:
+                out[alias] = rec.cls
+        return out
 
-if HAS_ADHD_STATE:
-    REGISTRY["adhd_state"] = ADHDStateTool
+    def __getitem__(self, key: str) -> type:
+        return self._classes()[key]
 
-if HAS_APP_LAUNCHER:
-    REGISTRY["app_launcher"] = AppLauncherTool
+    def __iter__(self):
+        return iter(self._classes())
 
-if HAS_CONNECTIONS:
-    REGISTRY["connections"] = ConnectionStatusTool
+    def __len__(self) -> int:
+        return len(self._classes())
 
-if HAS_CAREER:
-    REGISTRY["career_os"] = CareerTool
-    REGISTRY["career"] = CareerTool
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        return self._classes().get(key, default)
 
-if HAS_INCOME:
-    REGISTRY.update({
-        "income_opportunities": IncomeOpportunitiesTool,
-        "investment_research": InvestmentResearchTool,
-        "income_projects": IncomeProjectsTool,
-        "money_briefing": MoneyBriefingTool,
-    })
+    def update(self, *_args, **_kwargs) -> None:
+        raise TypeError(
+            "REGISTRY is discovered, not assembled. Define a BaseTool subclass "
+            "in jarvis/tools/ or drop a module in ~/.jarvis/plugins/."
+        )
 
-try:
-    from jarvis.tools.calendar_tools import CalendarToolEnhanced, TaskLearningTool, WeatherTool
-    HAS_CALENDAR_ENHANCED = True
-except ImportError:
-    HAS_CALENDAR_ENHANCED = False
 
-if HAS_CALENDAR_ENHANCED:
-    REGISTRY.update({
-        "calendar_enhanced": CalendarToolEnhanced,
-        "weather": WeatherTool,
-        "task_learning": TaskLearningTool,
-    })
-
-try:
-    from jarvis.tools.email_tools import EmailEnhancedTool, ProactiveBriefingTool
-    HAS_EMAIL_ENHANCED = True
-except ImportError:
-    HAS_EMAIL_ENHANCED = False
-
-if HAS_EMAIL_ENHANCED:
-    REGISTRY.update({
-        "email_enhanced": EmailEnhancedTool,
-        "proactive_briefing": ProactiveBriefingTool,
-    })
-
-try:
-    from jarvis.tools.focus_enhanced import (
-        WebsiteBlockerTool,
-        FocusSoundsTool,
-        HyperfocusGuardTool,
-        FocusSessionEnhancedTool,
-    )
-    HAS_FOCUS_ENHANCED = True
-except ImportError:
-    HAS_FOCUS_ENHANCED = False
-
-if HAS_FOCUS_ENHANCED:
-    REGISTRY.update({
-        "website_blocker": WebsiteBlockerTool,
-        "focus_sounds": FocusSoundsTool,
-        "hyperfocus_guard": HyperfocusGuardTool,
-        "focus_enhanced": FocusSessionEnhancedTool,
-    })
-
-try:
-    from jarvis.tools.face_tool import FaceRecognitionTool, VoiceCloningTool
-    HAS_FACE = True
-except ImportError:
-    HAS_FACE = False
-
-if HAS_FACE:
-    REGISTRY.update({
-        "face_recognition": FaceRecognitionTool,
-        "voice_cloning": VoiceCloningTool,
-    })
-
-try:
-    from jarvis.connectors.google import GoogleConnector
-    HAS_GOOGLE = True
-except ImportError:
-    HAS_GOOGLE = False
-
-try:
-    from jarvis.tools.network_tools import NetworkStatusTool, HybridModeTool
-    HAS_NETWORK = True
-except ImportError:
-    HAS_NETWORK = False
-
-if HAS_NETWORK:
-    REGISTRY.update({
-        "network_status": NetworkStatusTool,
-        "online_status": NetworkStatusTool,
-        "hybrid_mode": HybridModeTool,
-    })
-
-try:
-    from jarvis.tools.business_tools import (
-        BusinessProfileTool,
-        BusinessGoalsTool,
-        BusinessPrioritiesTool,
-        BusinessWorkflowsTool,
-        BusinessRulesTool,
-        BusinessMemoryTool,
-    )
-    HAS_BUSINESS = True
-except ImportError:
-    HAS_BUSINESS = False
-
-if HAS_BUSINESS:
-    REGISTRY.update({
-        "business_profile": BusinessProfileTool,
-        "business_goals": BusinessGoalsTool,
-        "business_priorities": BusinessPrioritiesTool,
-        "business_workflows": BusinessWorkflowsTool,
-        "business_rules": BusinessRulesTool,
-        "business_memory": BusinessMemoryTool,
-    })
+REGISTRY = _RegistryView()
 
 
 def get_tool(name: str) -> BaseTool | None:
-    cls = REGISTRY.get(name)
-    return cls() if cls else None
+    """Instantiate a tool by name, honouring the enable/disable file."""
+    return _registry().get(name)
 
 
-def list_tools() -> list[str]:
-    return list(REGISTRY.keys())
+def list_tools(include_disabled: bool = False) -> list[str]:
+    return _registry().names(include_disabled=include_disabled)
 
 
 def get_tools(names: list[str]) -> list[BaseTool]:
@@ -309,3 +98,33 @@ def get_tools(names: list[str]) -> list[BaseTool]:
         if t:
             tools.append(t)
     return tools
+
+
+def tool_record(name: str):
+    """Full metadata (behavior, scheduling, approval, load error) for one tool."""
+    return _registry().record(name)
+
+
+def list_tool_details() -> list[dict[str, Any]]:
+    """Everything discovery found, valid or not — what a settings UI renders."""
+    return _registry().list_for_ui()
+
+
+def refresh() -> None:
+    """Re-run discovery (after installing a plugin, say)."""
+    get_registry(refresh=True)
+
+
+__all__ = [
+    "ALIASES",
+    "REGISTRY",
+    "format_problems",
+    "get_tool",
+    "get_tools",
+    "is_enabled",
+    "list_tool_details",
+    "list_tools",
+    "refresh",
+    "set_enabled",
+    "tool_record",
+]

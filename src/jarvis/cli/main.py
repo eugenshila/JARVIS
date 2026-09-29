@@ -1275,5 +1275,107 @@ except ImportError as e:
         console.print("[red]Business OS failed to load. Check src/jarvis/cli/business.py[/]")
 
 
+@cli.command()
+@click.option("--rotate", is_flag=True, help="Issue a new token, invalidating existing clients")
+def token(rotate: bool):
+    """Show (or rotate) the API token remote clients need."""
+    from jarvis.server import auth as api_auth
+
+    value = api_auth.rotate_token() if rotate else api_auth.get_token()
+    console.print(f"[bold cyan]API token:[/] {value}")
+    console.print(f"[dim]Stored in {api_auth._token_path()} (mode 0600)[/]")
+    console.print("[dim]Send as: Authorization: Bearer <token>[/]")
+    if api_auth.loopback_exempt():
+        console.print("[dim]Local (loopback) requests are exempt. "
+                      "Set JARVIS_API_REQUIRE_TOKEN=1 to require it everywhere.[/]")
+
+
+@cli.command(name="do")
+@click.argument("goal", nargs=-1, required=True)
+@click.option("--background", is_flag=True, help="Queue it and return immediately")
+@click.option("--dry-run", is_flag=True, help="Show the plan without running it")
+def do_goal(goal: tuple[str, ...], background: bool, dry_run: bool):
+    """Plan a goal and carry it out."""
+    from jarvis.agents.executor import run_goal, submit_goal
+    from jarvis.agents.planner import plan as make_plan
+
+    text = " ".join(goal)
+
+    if dry_run:
+        built = make_plan(text)
+        console.print(built.describe())
+        return
+
+    if background:
+        task = submit_goal(text)
+        console.print(f"[cyan]Queued[/] {task.task_id}: {text}")
+        console.print("[dim]Track it with `jarvis tasks`.[/]")
+        return
+
+    plan_obj, execution = run_goal(text, progress=lambda m: console.print(f"[dim]  {m}[/]"))
+    console.print(plan_obj.describe())
+    console.print()
+    console.print(execution.transcript() or "(no steps ran)")
+    console.print(f"\n[bold]{execution.summary()}[/]")
+
+
+@cli.command()
+@click.option("--enable", "enable", is_flag=True, help="Allow screen/camera capture")
+@click.option("--disable", "disable", is_flag=True, help="Forbid screen/camera capture")
+@click.option("--purge", is_flag=True, help="Delete every stored capture")
+@click.option("--screen", is_flag=True, help="Take one screen grab now")
+def capture(enable: bool, disable: bool, purge: bool, screen: bool):
+    """Screen and camera capture: status, consent, and stored images."""
+    from jarvis.core import capture as capture_core
+
+    if enable:
+        capture_core.set_consent(True)
+        console.print("[yellow]Capture enabled for this process.[/] "
+                      "Set JARVIS_ALLOW_CAPTURE=1 to persist it.")
+    if disable:
+        capture_core.set_consent(False)
+        console.print("[green]Capture disabled.[/]")
+    if purge:
+        console.print(f"Deleted {capture_core.prune(keep=0)} stored capture(s).")
+    if screen:
+        try:
+            console.print(capture_core.capture_screen().describe())
+        except capture_core.CaptureError as exc:
+            console.print(f"[red]{exc}[/]")
+
+    state = capture_core.status()
+    table = Table(title="Capture")
+    table.add_column("Setting")
+    table.add_column("Value")
+    for key, value in state.items():
+        table.add_row(key, str(value))
+    console.print(table)
+
+
+@cli.command()
+@click.option("--cancel", default="", help="Cancel a task by id")
+def tasks(cancel: str):
+    """Show background tasks."""
+    from jarvis.core.task_queue import get_queue
+
+    queue = get_queue()
+    if cancel:
+        console.print("[yellow]Cancelling[/]" if queue.cancel(cancel) else "[red]No such task[/]")
+        return
+    snap = queue.snapshot()
+    if not snap["active"] and not snap["recent"]:
+        console.print("[dim]No tasks.[/]")
+        return
+    table = Table(title="Tasks")
+    for column in ("ID", "Status", "Priority", "Goal", "Progress"):
+        table.add_column(column)
+    for item in snap["active"] + snap["recent"][:10]:
+        table.add_row(
+            item["task_id"], item["status"], item["priority"],
+            item["goal"][:50], (item["progress"] or item["error"])[:40],
+        )
+    console.print(table)
+
+
 if __name__ == "__main__":
     cli()

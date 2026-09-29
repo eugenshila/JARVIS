@@ -54,6 +54,21 @@ inference-litellm = [
 inference-ollama = [
     "ollama>=0.2.0",
 ]
+capture = [
+    "mss>=9.0",
+    "pillow>=10.0",
+    "opencv-python>=4.9",
+]
+wakeword = [
+    "openwakeword>=0.6",
+    "sounddevice>=0.5",
+    "numpy>=1.24",
+]
+files = [
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+    "pillow>=10.0",
+]
 tools-search = [
     "tavily-python>=0.3",
     "ddgs>=9.11.4",
@@ -90,6 +105,9 @@ all = [
     "google-auth-oauthlib>=1.2",
     "google-api-python-client>=2.140",
     "google-auth>=2.30",
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+    "pillow>=10.0",
 ]
 
 [project.scripts]

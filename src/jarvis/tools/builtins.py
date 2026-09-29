@@ -9,6 +9,8 @@ import subprocess
 import sys
 from typing import Any
 
+from jarvis.core import confirm as confirm_gate
+from jarvis.core.undo import push_undo
 from jarvis.tools.base import BaseTool, ToolSpec
 
 
@@ -53,8 +55,23 @@ class FileWriteTool(BaseTool):
     def run(self, path: str, content: str, **kwargs) -> str:
         p = pathlib.Path(path).expanduser()
         try:
+            # Capture the "before" state so the write is reversible. A write is
+            # recoverable, so it does NOT ask permission — it just remembers how
+            # to undo itself. See jarvis/core/undo.py.
+            existed = p.exists()
+            previous = p.read_text(encoding="utf-8", errors="replace") if existed else None
+
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
+
+            def _reverse(target=p, old=previous, had=existed) -> str:
+                if had:
+                    target.write_text(old or "", encoding="utf-8")
+                    return "previous contents restored"
+                target.unlink(missing_ok=True)
+                return "file removed"
+
+            push_undo(f"write {p.name}", _reverse)
             return f"Wrote {len(content)} chars to {path}"
         except Exception as e:
             return f"Error writing {path}: {e}"
@@ -76,6 +93,27 @@ class ShellTool(BaseTool):
     )
 
     def run(self, command: str, cwd: str | None = None, **kwargs) -> str:
+        """Running a command is not reversible, so it goes through the gate.
+
+        Note there is deliberately no ``confirm`` parameter: the model writes
+        tool parameters, so a parameter can never be evidence that a human
+        agreed. :mod:`jarvis.core.confirm` issues the token to the interface
+        instead, and only a real CONFIRM from the UI resolves it.
+        """
+        if kwargs.get("_confirmed") is not True:
+            pending = confirm_gate.request(
+                title="Run a shell command",
+                detail=f"$ {command}" + (f"\n(in {cwd})" if cwd else ""),
+                run=lambda: self._execute(command, cwd),
+            )
+            return (
+                f"Awaiting confirmation before running: {command}\n"
+                f"Confirm or cancel in the interface (token {pending.token[:8]}…, "
+                f"expires in {int(confirm_gate.TIMEOUT_SECONDS)}s)."
+            )
+        return self._execute(command, cwd)
+
+    def _execute(self, command: str, cwd: str | None = None) -> str:
         try:
             result = subprocess.run(
                 command,
