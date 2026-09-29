@@ -1,8 +1,8 @@
 # Build the JARVIS Windows executable and MSI.
 #
 # Usage:
-#   .\deploy\windows\build_msi.ps1 -Version 0.2.0
-#   .\deploy\windows\build_msi.ps1 -Version 0.2.0 -SkipDeps
+#   .\deploy\windows\build_msi.ps1 -Version 0.2.1
+#   .\deploy\windows\build_msi.ps1 -Version 0.2.1 -SkipDeps
 #
 # The MSI deliberately packages PyInstaller one-file executables. That keeps the
 # installer from omitting DLLs or one of the package's runtime modules while also
@@ -10,7 +10,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
-    [string]$Version = "0.2.0",
+    [string]$Version = "0.2.1",
     [string]$PythonExe = "python",
     [switch]$SkipDeps,
     # Kept as an explicit, backwards-compatible switch because older build

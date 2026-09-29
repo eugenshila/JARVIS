@@ -4,7 +4,7 @@
 
 ### Windows MSI
 
-Download `JARVIS-0.2.0-x64.msi` from the **Windows JARVIS MSI** GitHub Actions
+Download `JARVIS-0.2.1-x64.msi` from the **Windows JARVIS MSI** GitHub Actions
 artifact. This is the repository's single canonical Windows package. It includes
 the local API and the same React dashboard used by development and GitHub Pages,
 plus Start Menu shortcuts and a portable ZIP. The MSI deliberately does not add
