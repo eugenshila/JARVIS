@@ -160,7 +160,8 @@ jobs:
           if-no-files-found: error
 
       - name: Publish replacement GitHub Release
-        if: github.event_name == 'workflow_dispatch'
+        # PR #10 is the one-off rebuild requested for the installed MSI.
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 10)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -177,4 +178,5 @@ jobs:
             dist/JARVIS-${{ steps.version.outputs.version }}-portable.zip
             dist/SHA256SUMS.txt
           fail_on_unmatched_files: true
+          overwrite_files: true
           make_latest: true
