@@ -702,4 +702,11 @@ def serve_cli():
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
-    uvicorn.run("jarvis.server.api:app", host=args.host, port=args.port, reload=args.reload)
+    # Keep the packaged server independent of Uvicorn's formatter config lookup.
+    uvicorn.run(
+        "jarvis.server.api:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+        log_config=None,
+    )
