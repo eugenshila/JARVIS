@@ -1320,6 +1320,39 @@ def do_goal(goal: tuple[str, ...], background: bool, dry_run: bool):
 
 
 @cli.command()
+@click.option("--enable", "enable", is_flag=True, help="Allow screen/camera capture")
+@click.option("--disable", "disable", is_flag=True, help="Forbid screen/camera capture")
+@click.option("--purge", is_flag=True, help="Delete every stored capture")
+@click.option("--screen", is_flag=True, help="Take one screen grab now")
+def capture(enable: bool, disable: bool, purge: bool, screen: bool):
+    """Screen and camera capture: status, consent, and stored images."""
+    from jarvis.core import capture as capture_core
+
+    if enable:
+        capture_core.set_consent(True)
+        console.print("[yellow]Capture enabled for this process.[/] "
+                      "Set JARVIS_ALLOW_CAPTURE=1 to persist it.")
+    if disable:
+        capture_core.set_consent(False)
+        console.print("[green]Capture disabled.[/]")
+    if purge:
+        console.print(f"Deleted {capture_core.prune(keep=0)} stored capture(s).")
+    if screen:
+        try:
+            console.print(capture_core.capture_screen().describe())
+        except capture_core.CaptureError as exc:
+            console.print(f"[red]{exc}[/]")
+
+    state = capture_core.status()
+    table = Table(title="Capture")
+    table.add_column("Setting")
+    table.add_column("Value")
+    for key, value in state.items():
+        table.add_row(key, str(value))
+    console.print(table)
+
+
+@cli.command()
 @click.option("--cancel", default="", help="Cancel a task by id")
 def tasks(cancel: str):
     """Show background tasks."""

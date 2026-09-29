@@ -6,14 +6,15 @@ import asyncio
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
-import time
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,8 +28,11 @@ from jarvis.engine.registry import get_engine, list_engines
 from jarvis.memory.store import MemoryStore
 from jarvis.skills.registry import SkillRegistry
 from jarvis.telemetry.monitor import TelemetryStore
-from jarvis.voice import read_voice_status, available_voice
+from jarvis.voice import available_voice, read_voice_status
 
+#: Upload ceiling. Large enough for a video, small enough that a stray loop
+#: cannot fill the user's disk.
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
 app = FastAPI(title="JARVIS API", version=__version__, description="Personal AI, On Personal Devices")
 
@@ -649,6 +653,102 @@ def cancel_task(task_id: str):
     return {"status": "cancelling", "task_id": task_id}
 
 
+@app.get("/capture")
+def capture_status():
+    from jarvis.core import capture as capture_core
+
+    return capture_core.status()
+
+
+@app.post("/capture/screen")
+def capture_screen_now(analyse: bool = False, question: str = "Describe what is on the screen."):
+    """Take one screen grab. Refused unless the user has granted consent."""
+    from jarvis.core import capture as capture_core
+
+    try:
+        shot = capture_core.capture_screen()
+    except capture_core.CaptureError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    payload = {
+        "path": str(shot.path),
+        "width": shot.width,
+        "height": shot.height,
+        "bytes": shot.bytes_written,
+    }
+    if analyse:
+        from jarvis.tools.capture_tools import _describe
+
+        payload["description"] = _describe(str(shot.path), question)
+    return payload
+
+
+# Uploads need python-multipart. It is a declared dependency, but a minimal
+# or partially-installed environment must lose the upload route, not the
+# whole API.
+try:
+    import importlib.util as _importlib_util
+
+    _UPLOADS_OK = any(
+        _importlib_util.find_spec(name) is not None
+        for name in ("python_multipart", "multipart")
+    )
+except (ImportError, ValueError):  # pragma: no cover - depends on the install
+    _UPLOADS_OK = False
+
+
+def _register_upload_route() -> None:
+    @app.post("/upload")
+    async def upload_file(file: UploadFile = File(...)):  # noqa: B008
+        """Accept a file and report what can be done with it.
+
+        Lands in the first genuinely writable directory of the fallback chain in
+        jarvis/core/paths.py — 'write next to the executable' fails on a real
+        install where Program Files is read-only.
+        """
+        from jarvis.core.paths import uploads_dir
+        from jarvis.tools.file_processor import detect_type, supported_actions
+
+        safe_name = Path(str(file.filename or "upload")).name
+        destination = uploads_dir() / safe_name
+        size = 0
+        try:
+            with destination.open("wb") as handle:
+                while chunk := await file.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > MAX_UPLOAD_BYTES:
+                        handle.close()
+                        destination.unlink(missing_ok=True)
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"File exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+                        )
+                    handle.write(chunk)
+        except HTTPException:
+            raise
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not save upload: {exc}") from exc
+
+        return {
+            "path": str(destination),
+            "name": safe_name,
+            "bytes": size,
+            "type": detect_type(destination),
+            "actions": supported_actions(str(destination)),
+        }
+
+
+
+if _UPLOADS_OK:
+    _register_upload_route()
+
+
+@app.get("/monitors")
+def list_monitors():
+    from jarvis.tools.monitor_tools import due_topics, load_monitors
+
+    return {"monitors": load_monitors(), "due": due_topics()}
+
+
 @app.get("/profile")
 def get_profile_facts():
     from jarvis.memory.profile import get_profile
@@ -841,8 +941,9 @@ if _frontend.joinpath("index.html").exists():
 
 def serve_cli():
     """Entry point for jarvis-server command."""
-    import uvicorn
     import argparse
+
+    import uvicorn
 
     parser = argparse.ArgumentParser(description="JARVIS API Server")
     parser.add_argument("--host", default="0.0.0.0")

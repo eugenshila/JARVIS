@@ -54,6 +54,16 @@ inference-litellm = [
 inference-ollama = [
     "ollama>=0.2.0",
 ]
+capture = [
+    "mss>=9.0",
+    "pillow>=10.0",
+    "opencv-python>=4.9",
+]
+wakeword = [
+    "openwakeword>=0.6",
+    "sounddevice>=0.5",
+    "numpy>=1.24",
+]
 files = [
     "pypdf>=4.0",
     "python-docx>=1.1",
