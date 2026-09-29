@@ -102,9 +102,12 @@ def _start_server(frontend: Path):
     import uvicorn
 
     port = _free_port()
-    # PyInstaller can ship Uvicorn's formatter module without preserving the
-    # package-relative logging configuration lookup. Disable Uvicorn's default
-    # dictConfig so the frozen HUD never dies before it opens its window.
+    # Do not let Uvicorn apply its default dictConfig here.  In the frozen
+    # Windows desktop build that configuration references
+    # ``uvicorn.logging.DefaultFormatter``; PyInstaller can omit that module,
+    # which makes startup fail with: "Unable to configure formatter 'default'."
+    # The desktop launcher already has its own file logger, and access logs are
+    # disabled, so Uvicorn's logging configuration is unnecessary.
     config = uvicorn.Config(
         create_app(frontend),
         host=HOST,
