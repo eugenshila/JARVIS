@@ -176,7 +176,9 @@ jobs:
           if-no-files-found: error
 
       - name: Publish replacement GitHub Release
-        if: github.event_name == 'workflow_dispatch'
+        # TEMPORARY: republish the runtime-selftested v0.2.1 build from this
+        # fix branch, then revert to manual-only.
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'arena/01a0ecfc-jarvis')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
