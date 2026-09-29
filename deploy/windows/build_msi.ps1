@@ -1,8 +1,8 @@
 # Build the JARVIS Windows executable and MSI.
 #
 # Usage:
-#   .\deploy\windows\build_msi.ps1 -Version 0.2.0
-#   .\deploy\windows\build_msi.ps1 -Version 0.2.0 -SkipDeps
+#   .\deploy\windows\build_msi.ps1 -Version 0.2.1
+#   .\deploy\windows\build_msi.ps1 -Version 0.2.1 -SkipDeps
 #
 # The MSI deliberately packages PyInstaller one-file executables. That keeps the
 # installer from omitting DLLs or one of the package's runtime modules while also
@@ -10,7 +10,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
-    [string]$Version = "0.2.0",
+    [string]$Version = "0.2.1",
     [string]$PythonExe = "python",
     [switch]$SkipDeps,
     # Kept as an explicit, backwards-compatible switch because older build
@@ -81,6 +81,23 @@ try {
         Invoke-Native $PythonExe @("-m", "pip", "install", "pyinstaller>=6.0")
         Invoke-Native $PythonExe @("-m", "pip", "install", "-e", ".[voice,windows]")
 
+        # Ship a small offline Whisper model so the first microphone use does
+        # not depend on a Hugging Face download or internet access.
+        if (-not (Test-Path "whisper-model\model.bin")) {
+            $downloadWhisper = @'
+from pathlib import Path
+import shutil
+from huggingface_hub import snapshot_download
+source = Path(snapshot_download("Systran/faster-whisper-tiny.en"))
+target = Path("whisper-model")
+target.mkdir(parents=True, exist_ok=True)
+for item in source.iterdir():
+    if item.is_file():
+        shutil.copy2(item, target / item.name)
+'@
+            Invoke-Native $PythonExe @("-c", $downloadWhisper)
+        }
+
         Push-Location (Join-Path $Root "frontend")
         try {
             Invoke-Native "npm" @("ci")
@@ -102,10 +119,23 @@ try {
     if (Test-Path "assets/icon.ico") {
         $iconArgs = @("--icon", "assets/icon.ico")
     }
+    # The neural Piper model and runtime are downloaded by CI before this
+    # script runs. Keep local builds useful when those optional assets are not
+    # present, but include them whenever they are available.
+    $voiceArgs = @()
+    if (Test-Path "voice") {
+        $voiceArgs += @("--add-data", "voice;voice")
+    }
+    if (Test-Path "piper") {
+        $voiceArgs += @("--add-data", "piper;piper")
+    }
+    if (Test-Path "whisper-model") {
+        $voiceArgs += @("--add-data", "whisper-model;whisper-model")
+    }
 
     # Boot launcher used by the installer auto-start entry. It starts Ollama,
     # serves the bundled HUD/API, and starts the hands-free voice companion.
-    $pyArgs = $iconArgs + @(
+    $pyArgs = $iconArgs + $voiceArgs + @(
         "--clean", "--noconfirm", "--onefile", "--console",
         "--name", "jarvis",
         "--paths", "src",
@@ -145,7 +175,7 @@ try {
     # Native desktop HUD host used by Start Menu/manual launches. It serves the
     # same production React HUD as development and opens it in WebView2 with an
     # Edge/browser fallback instead of the old unrelated Tkinter approximation.
-    $desktopArgs = $iconArgs + @(
+    $desktopArgs = $iconArgs + $voiceArgs + @(
         "--clean", "--noconfirm", "--onefile", "--windowed",
         "--name", "jarvis-desktop",
         "--paths", "src",

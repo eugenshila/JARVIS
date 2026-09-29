@@ -7,7 +7,11 @@
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"
              Description="JARVIS SHILATECH — Local-first Personal AI"
              Comments="Apache 2.0 License SHILATECH" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <!-- AllowSameVersionUpgrades ensures a rebuilt MSI with an identical
+         ProductVersion still replaces the existing install instead of creating
+         a second side-by-side product in the same folder. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <Feature Id="ProductFeature" Title="JARVIS SHILATECH" Level="1">

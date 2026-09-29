@@ -26,8 +26,15 @@ on:
       - "deploy/windows/**"
       - ".github/workflows/windows-msi.yml"
 
+# The manual replacement build also publishes the tested MSI as a GitHub
+# Release. Pull requests and main pushes still only upload CI artifacts.
 permissions:
-  contents: read
+  contents: write
+
+# A newer build of the same ref supersedes any still-running one.
+concurrency:
+  group: windows-msi-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
@@ -98,6 +105,24 @@ jobs:
           Get-Command candle.exe
           Get-Command light.exe
 
+      - name: Download neural JARVIS voice assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path voice, piper | Out-Null
+          Invoke-WebRequest -Uri "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx" -OutFile "voice/jarvis-medium.onnx"
+          Invoke-WebRequest -Uri "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx.json" -OutFile "voice/jarvis-medium.onnx.json"
+          $piperArchive = Join-Path $env:RUNNER_TEMP 'piper_windows_amd64.zip'
+          Invoke-WebRequest -Uri "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip" -OutFile $piperArchive
+          Expand-Archive -Path $piperArchive -DestinationPath piper -Force
+          $piperExe = Get-ChildItem piper -Filter piper.exe -Recurse | Select-Object -First 1
+          if (-not $piperExe) { throw 'Piper executable was not found after extraction.' }
+          Copy-Item (Join-Path $piperExe.Directory.FullName '*') piper -Recurse -Force
+          if (-not (Test-Path 'voice/jarvis-medium.onnx') -or -not (Test-Path 'piper/piper.exe')) {
+            throw 'Neural voice assets are incomplete.'
+          }
+          Write-Host 'Bundled JARVIS neural voice and Piper runtime.'
+
       - name: Build MSI and portable ZIP
         shell: pwsh
         run: .\deploy\windows\build_msi.ps1 -Version "${{ steps.version.outputs.version }}" -OneFile
@@ -115,6 +140,7 @@ jobs:
           Get-Content dist/SHA256SUMS.txt
 
       - name: Install and uninstall smoke test
+        timeout-minutes: 10
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
@@ -124,6 +150,16 @@ jobs:
           $installDir = Join-Path $env:ProgramFiles 'JARVIS SHILATECH'
           foreach ($file in @('jarvis.exe', 'jarvis-desktop.exe', 'config.example.toml')) {
             if (-not (Test-Path (Join-Path $installDir $file))) { throw "Installed file missing: $file" }
+          }
+          # Launch the installed frozen HUD executable in selftest mode. This
+          # catches PyInstaller-only startup crashes (e.g. Uvicorn's
+          # "Unable to configure formatter 'default'") that a file-presence
+          # check can never see.
+          $selftest = Start-Process (Join-Path $installDir 'jarvis-desktop.exe') -Wait -PassThru -ArgumentList '--selftest'
+          if ($selftest.ExitCode -ne 0) {
+            $log = Join-Path $env:USERPROFILE '.jarvis\desktop.log'
+            if (Test-Path $log) { Get-Content $log -Tail 40 }
+            throw "Installed jarvis-desktop.exe failed its startup selftest (exit $($selftest.ExitCode))"
           }
           $uninstall = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/x', "`"$msi`"", '/qn', '/norestart')
           if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed with exit code $($uninstall.ExitCode)" }
@@ -138,3 +174,26 @@ jobs:
             dist/JARVIS-${{ steps.version.outputs.version }}-portable.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
+
+      - name: Publish replacement GitHub Release
+        # TEMPORARY: republish the runtime-selftested v0.2.1 build from this
+        # fix branch, then revert to manual-only.
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'arena/01a0ecfc-jarvis')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: JARVIS ${{ steps.version.outputs.version }}
+          body: |
+            Replacement Windows installer for JARVIS ${{ steps.version.outputs.version }}.
+
+            This build includes the Uvicorn formatter fix plus the bundled British
+            JARVIS neural voice, Piper runtime, and offline Whisper wake/command model.
+            SHA-256 checksums are included alongside the MSI.
+          files: |
+            dist/JARVIS-${{ steps.version.outputs.version }}-x64.msi
+            dist/JARVIS-${{ steps.version.outputs.version }}-portable.zip
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true
