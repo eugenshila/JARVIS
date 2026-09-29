@@ -79,7 +79,9 @@ def start_api() -> threading.Thread:
     from jarvis.server.api import app
 
     def run() -> None:
-        uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+        # Do not load Uvicorn's default dictConfig in the frozen executable.
+        # Its formatter lookup can fail before the packaged HUD is reachable.
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning", log_config=None)
 
     thread = threading.Thread(target=run, name="jarvis-api", daemon=True)
     thread.start()

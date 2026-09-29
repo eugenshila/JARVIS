@@ -102,8 +102,16 @@ def _start_server(frontend: Path):
     import uvicorn
 
     port = _free_port()
+    # PyInstaller can ship Uvicorn's formatter module without preserving the
+    # package-relative logging configuration lookup. Disable Uvicorn's default
+    # dictConfig so the frozen HUD never dies before it opens its window.
     config = uvicorn.Config(
-        create_app(frontend), host=HOST, port=port, log_level="warning", access_log=False
+        create_app(frontend),
+        host=HOST,
+        port=port,
+        log_level="warning",
+        access_log=False,
+        log_config=None,
     )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, name="jarvis-local-server", daemon=True)

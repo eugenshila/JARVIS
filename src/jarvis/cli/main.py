@@ -235,7 +235,10 @@ def serve(host: str, port: int, reload: bool):
 
     console.print(f"[green]Starting JARVIS server at http://{host}:{port}[/]")
     console.print(f"Docs at http://{host}:{port}/docs")
-    uvicorn.run("jarvis.server.api:app", host=host, port=port, reload=reload)
+    # Avoid Uvicorn's formatter dictConfig lookup in frozen/portable builds.
+    uvicorn.run(
+        "jarvis.server.api:app", host=host, port=port, reload=reload, log_config=None
+    )
 
 
 @cli.command()
