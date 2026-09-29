@@ -118,24 +118,6 @@ jobs:
           }
           Write-Host 'Bundled JARVIS neural voice and Piper runtime.'
 
-      - name: Download neural JARVIS voice assets
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path voice, piper | Out-Null
-          Invoke-WebRequest -Uri "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx" -OutFile "voice/jarvis-medium.onnx"
-          Invoke-WebRequest -Uri "https://huggingface.co/jgkawell/jarvis/resolve/main/en/en_GB/jarvis/medium/jarvis-medium.onnx.json" -OutFile "voice/jarvis-medium.onnx.json"
-          $piperArchive = Join-Path $env:RUNNER_TEMP 'piper_windows_amd64.zip'
-          Invoke-WebRequest -Uri "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip" -OutFile $piperArchive
-          Expand-Archive -Path $piperArchive -DestinationPath piper -Force
-          $piperExe = Get-ChildItem piper -Filter piper.exe -Recurse | Select-Object -First 1
-          if (-not $piperExe) { throw 'Piper executable was not found after extraction.' }
-          Copy-Item (Join-Path $piperExe.Directory.FullName '*') piper -Recurse -Force
-          if (-not (Test-Path 'voice/jarvis-medium.onnx') -or -not (Test-Path 'piper/piper.exe')) {
-            throw 'Neural voice assets are incomplete.'
-          }
-          Write-Host 'Bundled JARVIS neural voice and Piper runtime.'
-
       - name: Build MSI and portable ZIP
         shell: pwsh
         run: .\deploy\windows\build_msi.ps1 -Version "${{ steps.version.outputs.version }}" -OneFile
@@ -187,8 +169,9 @@ jobs:
           body: |
             Replacement Windows installer for JARVIS ${{ steps.version.outputs.version }}.
 
-            This build includes the Uvicorn formatter fix for the packaged HUD and
-            boot executables. SHA-256 checksums are included alongside the MSI.
+            This build includes the Uvicorn formatter fix plus the bundled British
+            JARVIS neural voice, Piper runtime, and offline Whisper wake/command model.
+            SHA-256 checksums are included alongside the MSI.
           files: |
             dist/JARVIS-${{ steps.version.outputs.version }}-x64.msi
             dist/JARVIS-${{ steps.version.outputs.version }}-portable.zip
