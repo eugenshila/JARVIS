@@ -128,9 +128,39 @@ class CircularHUDApp(tk.Tk):
         self.arc_label_top = tk.Label(right_top, text=f"ARC {self._arc_power:.1f}%", bg="#083344", fg="#22d3ee", font=("JetBrains Mono", 8), borderwidth=1, relief="solid", padx=4)
         self.arc_label_top.pack(side="left", padx=4)
 
+        # ── Confirmation bar ─────────────────────────────────────────────────
+        # The interface half of jarvis/core/confirm.py. A tool that wants to do
+        # something irreversible registers the work and returns immediately;
+        # nothing runs until a human presses CONFIRM *here*. The model can write
+        # any tool argument it likes, but it cannot press this button.
+        self._confirm_token = None
+        self._confirm_busy = False
+        self.confirm_bar = tk.Frame(self, bg="#1c1206", padx=8, pady=5,
+                                    highlightbackground="#f59e0b", highlightthickness=1)
+        confirm_text = tk.Frame(self.confirm_bar, bg="#1c1206")
+        confirm_text.pack(side="left", fill="x", expand=True)
+        self.confirm_title = tk.Label(confirm_text, text="", bg="#1c1206", fg="#fde68a",
+                                      font=("JetBrains Mono", 9, "bold"), anchor="w", justify="left")
+        self.confirm_title.pack(fill="x")
+        self.confirm_detail = tk.Label(confirm_text, text="", bg="#1c1206", fg="#d6b268",
+                                       font=("JetBrains Mono", 8), anchor="w", justify="left", wraplength=900)
+        self.confirm_detail.pack(fill="x")
+        self.confirm_countdown = tk.Label(self.confirm_bar, text="", bg="#1c1206", fg="#f59e0b",
+                                          font=("JetBrains Mono", 8), width=6)
+        self.confirm_countdown.pack(side="left", padx=6)
+        self.confirm_cancel_btn = tk.Button(self.confirm_bar, text="CANCEL", command=self.cancel_confirmation,
+                                            bg="#020208", fg="#22d3ee", font=("JetBrains Mono", 8),
+                                            borderwidth=1, relief="solid", padx=10)
+        self.confirm_cancel_btn.pack(side="right", padx=3)
+        self.confirm_ok_btn = tk.Button(self.confirm_bar, text="CONFIRM", command=self.approve_confirmation,
+                                        bg="#422006", fg="#fde68a", font=("JetBrains Mono", 8, "bold"),
+                                        borderwidth=1, relief="solid", padx=10)
+        self.confirm_ok_btn.pack(side="right", padx=3)
+
         # Main flex
         main = tk.Frame(self, bg="#020208")
         main.pack(fill="both", expand=True)
+        self._main_frame = main
 
         # Left panel — Device specs + MITs + Security
         left = tk.Frame(main, bg="black", width=240, padx=8, pady=8, highlightbackground="#0e7490", highlightthickness=1)
@@ -279,6 +309,7 @@ class CircularHUDApp(tk.Tk):
         self.update_clock()
         self.after(500, self.good_morning)
         self.after(1000, self.check_online)
+        self.after(1000, self.poll_confirmations)
         self.after(60000, self.keep_alive)
 
     def draw_circular_hud(self):
@@ -546,6 +577,101 @@ class CircularHUDApp(tk.Tk):
                     self.after(1000, self.update_clock)
             except:
                 pass
+
+    # ── Confirmation gate ────────────────────────────────────────────────────
+    def poll_confirmations(self):
+        """Show whatever is waiting on a human, once a second.
+
+        Polling rather than a callback on purpose: the request can be raised
+        from any worker thread, and Tk widgets may only be touched from the
+        main loop.
+        """
+        try:
+            if getattr(self, '_is_closing', False):
+                return
+            pending = []
+            try:
+                from jarvis.core import confirm as confirm_gate
+                pending = confirm_gate.pending()
+            except Exception:
+                pending = []  # jarvis package not installed — no gate to show
+            if pending and not self._confirm_busy:
+                item = pending[0]
+                self._confirm_token = item.get("token")
+                self.confirm_title.config(text=f"⚠ CONFIRMATION REQUIRED — {item.get('title', '')}")
+                self.confirm_detail.config(text=item.get("detail", ""))
+                self.confirm_countdown.config(text=f"{int(item.get('expires_in', 0))}s")
+                if not self.confirm_bar.winfo_ismapped():
+                    # Directly under the top bar, above the HUD, so it cannot be
+                    # scrolled out of sight or hidden behind a panel.
+                    if getattr(self, "_main_frame", None) is not None:
+                        self.confirm_bar.pack(fill="x", before=self._main_frame)
+                    else:
+                        self.confirm_bar.pack(fill="x")
+                    self.confirm_bar.lift()
+            elif not pending and not self._confirm_busy:
+                self._confirm_token = None
+                if self.confirm_bar.winfo_ismapped():
+                    self.confirm_bar.pack_forget()
+        except Exception as e:
+            if logging:
+                logging.error("poll_confirmations failed: %s", e)
+        finally:
+            try:
+                if not getattr(self, '_is_closing', False):
+                    self.after(1000, self.poll_confirmations)
+            except:
+                pass
+
+    def approve_confirmation(self):
+        """A human pressed CONFIRM — release the work, off the UI thread."""
+        token = self._confirm_token
+        if not token or self._confirm_busy:
+            return
+        self._confirm_busy = True
+        self._confirm_token = None
+        self.confirm_ok_btn.config(text="WORKING…", state="disabled")
+        self.confirm_cancel_btn.config(state="disabled")
+        title = self.confirm_title.cget("text")
+
+        def worker():
+            try:
+                from jarvis.core import confirm as confirm_gate
+                result = confirm_gate.resolve(token)
+            except Exception as e:
+                result = f"Confirmation failed: {e}"
+            self.after(0, lambda: self._finish_confirmation(result))
+
+        threading.Thread(target=worker, daemon=True).start()
+        if logging:
+            logging.info("Confirmation approved by user: %s", title)
+
+    def cancel_confirmation(self):
+        token = self._confirm_token
+        if not token or self._confirm_busy:
+            return
+        self._confirm_token = None
+        try:
+            from jarvis.core import confirm as confirm_gate
+            confirm_gate.cancel(token)
+        except Exception as e:
+            if logging:
+                logging.error("cancel_confirmation failed: %s", e)
+        self.add_message("system", "Cancelled, Sir. Nothing was run.")
+        try:
+            self.confirm_bar.pack_forget()
+        except Exception:
+            pass
+
+    def _finish_confirmation(self, result):
+        self._confirm_busy = False
+        try:
+            self.confirm_ok_btn.config(text="CONFIRM", state="normal")
+            self.confirm_cancel_btn.config(state="normal")
+            self.confirm_bar.pack_forget()
+        except Exception:
+            pass
+        self.add_message("system", str(result))
 
     def keep_alive(self):
         try:
