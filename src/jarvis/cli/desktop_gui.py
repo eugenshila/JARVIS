@@ -218,21 +218,23 @@ def _selftest() -> int:
     regressions that only appear in the PyInstaller build (for example the
     Uvicorn 'Unable to configure formatter default' crash) fail the pipeline
     instead of reaching users.
+
+    The process terminates with os._exit so lingering non-daemon threads or
+    event-loop state inside the frozen build can never leave CI hanging.
     """
-    server = None
     try:
         frontend = find_frontend()
         server, _thread, url = _start_server(frontend)
         LOG.info("Selftest OK: server ready at %s", url)
-        print(f"SELFTEST OK {url}")
-        return 0
+        server.should_exit = True
     except Exception as exc:
         LOG.exception("Selftest failed")
-        print(f"SELFTEST FAILED: {exc}", file=sys.stderr)
-        return 1
-    finally:
-        if server is not None:
-            server.should_exit = True
+        try:
+            print(f"SELFTEST FAILED: {exc}", file=sys.stderr)
+        except Exception:
+            pass
+        os._exit(1)
+    os._exit(0)
 
 
 def main() -> int:

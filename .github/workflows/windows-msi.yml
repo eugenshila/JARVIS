@@ -31,6 +31,11 @@ on:
 permissions:
   contents: write
 
+# A newer build of the same ref supersedes any still-running one.
+concurrency:
+  group: windows-msi-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-windows:
     name: Build and smoke-test canonical MSI
@@ -135,6 +140,7 @@ jobs:
           Get-Content dist/SHA256SUMS.txt
 
       - name: Install and uninstall smoke test
+        timeout-minutes: 10
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
