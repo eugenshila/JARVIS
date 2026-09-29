@@ -145,6 +145,16 @@ jobs:
           foreach ($file in @('jarvis.exe', 'jarvis-desktop.exe', 'config.example.toml')) {
             if (-not (Test-Path (Join-Path $installDir $file))) { throw "Installed file missing: $file" }
           }
+          # Launch the installed frozen HUD executable in selftest mode. This
+          # catches PyInstaller-only startup crashes (e.g. Uvicorn's
+          # "Unable to configure formatter 'default'") that a file-presence
+          # check can never see.
+          $selftest = Start-Process (Join-Path $installDir 'jarvis-desktop.exe') -Wait -PassThru -ArgumentList '--selftest'
+          if ($selftest.ExitCode -ne 0) {
+            $log = Join-Path $env:USERPROFILE '.jarvis\desktop.log'
+            if (Test-Path $log) { Get-Content $log -Tail 40 }
+            throw "Installed jarvis-desktop.exe failed its startup selftest (exit $($selftest.ExitCode))"
+          }
           $uninstall = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/x', "`"$msi`"", '/qn', '/norestart')
           if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed with exit code $($uninstall.ExitCode)" }
           if (Test-Path (Join-Path $installDir 'jarvis-desktop.exe')) { throw "Uninstall left jarvis-desktop.exe behind" }

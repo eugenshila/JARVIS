@@ -211,7 +211,33 @@ def _show_error(message: str) -> None:
         print(message, file=sys.stderr)
 
 
+def _selftest() -> int:
+    """Start the local server, hit /health, and exit without opening a window.
+
+    CI runs the *installed, frozen* executable with --selftest so packaging
+    regressions that only appear in the PyInstaller build (for example the
+    Uvicorn 'Unable to configure formatter default' crash) fail the pipeline
+    instead of reaching users.
+    """
+    server = None
+    try:
+        frontend = find_frontend()
+        server, _thread, url = _start_server(frontend)
+        LOG.info("Selftest OK: server ready at %s", url)
+        print(f"SELFTEST OK {url}")
+        return 0
+    except Exception as exc:
+        LOG.exception("Selftest failed")
+        print(f"SELFTEST FAILED: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if server is not None:
+            server.should_exit = True
+
+
 def main() -> int:
+    if "--selftest" in sys.argv[1:]:
+        return _selftest()
     server = None
     try:
         frontend = find_frontend()
