@@ -23,7 +23,32 @@ class BaseAgent(ABC):
         self.tools = get_tools(self.preset.tools)
 
     def _system_message(self) -> Message:
-        return Message(role=Role.SYSTEM, content=self.preset.system_prompt)
+        """The preset prompt, plus the always-injected profile facts.
+
+        The vector store only surfaces a fact when the query happens to
+        resemble it, which is no use for "who am I talking to?" — that has to
+        be known before the user says anything. See jarvis/memory/profile.py;
+        the layer is hard-bounded so this cannot grow into a tax on every call.
+        """
+        prompt = self.preset.system_prompt
+        try:
+            from jarvis.memory.profile import get_profile
+
+            facts = get_profile().for_prompt()
+        except Exception:
+            facts = ""
+        if facts:
+            prompt = f"{prompt}\n\n{facts}"
+        return Message(role=Role.SYSTEM, content=prompt)
+
+    def static_system_prompt(self) -> str:
+        """The part of the system prompt that does not change between calls.
+
+        Used to warm Ollama's KV prefix cache (see OllamaEngine.warmup): the
+        cached prefix is only valid while this text is stable, so anything
+        per-request must stay out of it.
+        """
+        return self.preset.system_prompt
 
     @abstractmethod
     def run(self, prompt: str, context: str = "", **kwargs) -> AgentResponse:

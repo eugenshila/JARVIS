@@ -32,6 +32,13 @@ from jarvis.voice import read_voice_status, available_voice
 
 app = FastAPI(title="JARVIS API", version=__version__, description="Personal AI, On Personal Devices")
 
+# Authentication. Loopback callers are exempt by default so the CLI, the
+# desktop shell and existing local workflows are unchanged; a request from off
+# the machine needs the token from `jarvis token`. See jarvis/server/auth.py.
+from jarvis.server import auth as api_auth  # noqa: E402
+
+api_auth.install(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -582,6 +589,72 @@ def tools_listing():
     from jarvis.tools.registry import list_tool_details
 
     return {"tools": list_tool_details()}
+
+
+# ── Plan / execute / background tasks ─────────────────────────────────────────
+
+
+class GoalRequest(BaseModel):
+    goal: str
+    tools: list[str] | None = None
+    priority: str = "normal"
+
+
+@app.post("/plan")
+def build_plan(req: GoalRequest):
+    """Plan a goal WITHOUT running it, so the user can see it first."""
+    from jarvis.agents.planner import plan as make_plan
+
+    return make_plan(req.goal, tools=req.tools).to_dict()
+
+
+@app.post("/tasks")
+def submit_task(req: GoalRequest):
+    """Plan and run a goal on the background queue. Returns immediately."""
+    from jarvis.agents.executor import submit_goal
+    from jarvis.core.task_queue import Priority
+
+    priority = {
+        "high": Priority.HIGH,
+        "normal": Priority.NORMAL,
+        "low": Priority.LOW,
+    }.get(req.priority.strip().lower(), Priority.NORMAL)
+    task = submit_goal(req.goal, tools=req.tools, priority=priority)
+    return task.to_dict()
+
+
+@app.get("/tasks")
+def list_tasks():
+    from jarvis.core.task_queue import get_queue
+
+    return get_queue().snapshot()
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: str):
+    from jarvis.core.task_queue import get_queue
+
+    task = get_queue().get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="No such task.")
+    return task.to_dict()
+
+
+@app.delete("/tasks/{task_id}")
+def cancel_task(task_id: str):
+    from jarvis.core.task_queue import get_queue
+
+    if not get_queue().cancel(task_id):
+        raise HTTPException(status_code=404, detail="No such task, or it already finished.")
+    return {"status": "cancelling", "task_id": task_id}
+
+
+@app.get("/profile")
+def get_profile_facts():
+    from jarvis.memory.profile import get_profile
+
+    profile = get_profile()
+    return {"profile": profile.all(), "size": profile.size()}
 
 
 @app.get("/v1/models")

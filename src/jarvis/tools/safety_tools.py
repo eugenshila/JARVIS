@@ -72,3 +72,55 @@ class PendingConfirmationsTool(BaseTool):
             )
         lines.append("Press CONFIRM or CANCEL in the interface.")
         return "\n".join(lines)
+
+
+class ProfileTool(BaseTool):
+    """Read and write the always-injected facts layer."""
+
+    spec = ToolSpec(
+        name="profile",
+        description=(
+            "Remember or forget a durable fact about the user that should be known "
+            "in EVERY future conversation without being searched for — their name, "
+            "how they like to be addressed, their current projects, standing goals. "
+            "Use this for identity and preferences; use memory_write for anything "
+            "that only matters when the topic comes up."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["remember", "forget", "show"],
+                    "default": "show",
+                },
+                "category": {
+                    "type": "string",
+                    "enum": list(__import__(
+                        "jarvis.memory.profile", fromlist=["CATEGORIES"]
+                    ).CATEGORIES),
+                    "description": "Which kind of fact this is",
+                },
+                "key": {"type": "string", "description": "Short label, e.g. 'name'"},
+                "value": {"type": "string", "description": "The fact itself"},
+            },
+            "required": [],
+        },
+    )
+
+    def run(self, action: str = "show", category: str = "", key: str = "", value: str = "", **kwargs) -> str:
+        from jarvis.memory.profile import get_profile
+
+        profile = get_profile()
+        action = str(action).strip().lower()
+
+        if action == "remember":
+            return profile.remember(category or "notes", key, value)
+        if action == "forget":
+            return profile.forget(category or "notes", key)
+
+        rendered = profile.for_prompt()
+        if not rendered:
+            return "I have no durable facts about you yet, sir."
+        size = profile.size()
+        return f"{rendered}\n\n({size['facts']} facts, {size['chars']}/{size['budget']} chars)"
