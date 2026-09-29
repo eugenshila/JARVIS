@@ -89,6 +89,27 @@ Non-blocking, 90-second expiry, bounded queue, and a token cannot be replayed
 (the entry is removed before the work runs). `ShellTool` and `AppLauncherTool`
 now go through it; `ShellTool` has no `confirm` parameter at all.
 
+### The affordance — where a human actually presses the button
+
+A gate with no button is just a queue that never drains, so both HUDs render
+pending requests:
+
+- **Browser HUD** — `frontend/src/components/ConfirmGate.tsx`, mounted in
+  `main.tsx` *outside* `<App>` so it appears over the dashboard, the Iron Man
+  HUDs and classic chat alike. It polls `GET /confirm` every 2s, shows title,
+  detail and a live countdown bar, and posts approve/cancel. `Esc` cancels the
+  oldest item; there is deliberately **no keyboard shortcut for approve** —
+  confirming should be a decision, not a reflex. When no backend answers (the
+  GitHub Pages demo) it backs off to a 30s heartbeat and renders nothing.
+- **Desktop HUD** — `app.py` grows an amber bar under the title bar
+  (`poll_confirmations`, `approve_confirmation`, `cancel_confirmation`). The
+  MSI build runs the agent in-process, so it reads `jarvis.core.confirm`
+  directly; approved work runs on a worker thread so a slow command cannot
+  freeze Tk.
+
+Both send the API token (`X-Jarvis-Token`) when one is configured, so the gate
+still works with `JARVIS_API_REQUIRE_TOKEN=1`.
+
 Reserved strictly for **irreversible** things. Everything else uses undo.
 
 ## 4. The undo stack — `jarvis/core/undo.py`
@@ -150,3 +171,25 @@ bounding, cooldown skip/backoff, token replay and expiry, "the shell tool does
 not run without a human", undo LIFO/bounding/failure, every classifier rule,
 malformed model output, broken-module discovery, user plugins, and two ReAct
 integration cases (transient failure recovered, permission failure aborted).
+
+`tests/test_confirm_hud.py` — 10 tests over the *interface* half: the HTTP
+endpoints (pending request visible, nothing runs until approve, a token cannot
+be replayed, cancel drops the work, unknown token rejected), the React gate
+(exists, calls the right endpoints, is mounted for every view, dev server
+proxies `/confirm`), and the desktop HUD (polls, exposes CONFIRM/CANCEL, runs
+approved work off the UI thread).
+
+## Known limitations
+
+1. **Loopback auth is permissive by default.** `server/auth.py` exempts
+   loopback callers unless `JARVIS_API_REQUIRE_TOKEN=1`. Any local process —
+   including a browser tab on a malicious page hitting `localhost:8000` — can
+   therefore reach shell-capable endpoints. Tightening the default would break
+   the CLI, the desktop shell and the launcher scripts, so it is a product
+   decision, not a patch.
+2. **`_call_with_timeout` leaks daemon threads.** A rung that exceeds its
+   timeout is abandoned, not cancelled: the worker thread keeps running until
+   the underlying HTTP call returns. Bounded in practice by the engines' own
+   socket timeouts, but a hung endpoint can accumulate threads over a long
+   session. A real fix needs cancellable engine calls (async client or
+   per-request session teardown).

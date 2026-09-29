@@ -10,7 +10,9 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       '/v1': 'http://localhost:8000','/run': 'http://localhost:8000','/agents': 'http://localhost:8000',
       '/health': 'http://localhost:8000','/memory': 'http://localhost:8000','/skills': 'http://localhost:8000',
-      '/telemetry': 'http://localhost:8000','/engines': 'http://localhost:8000','/hud': 'http://localhost:8000'
+      '/telemetry': 'http://localhost:8000','/engines': 'http://localhost:8000','/hud': 'http://localhost:8000',
+      '/confirm': 'http://localhost:8000','/undo': 'http://localhost:8000','/ladder': 'http://localhost:8000',
+      '/tools': 'http://localhost:8000'
     }
   },
   preview: { host: '0.0.0.0', port: 4173 }
