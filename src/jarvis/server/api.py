@@ -509,6 +509,81 @@ def health():
     return {"status": "ok", "version": __version__, "time": time.time()}
 
 
+# ── Confirmation gate ─────────────────────────────────────────────────────────
+#
+# These endpoints are the *interface* half of jarvis/core/confirm.py. The model
+# can never reach them: it only produces tool arguments, and no tool argument
+# resolves a token. A human clicking CONFIRM in the HUD is what calls
+# /confirm/{token}/approve.
+
+
+class ConfirmAction(BaseModel):
+    token: str
+
+
+@app.get("/confirm")
+def confirm_pending():
+    from jarvis.core import confirm as confirm_gate
+
+    return {"pending": confirm_gate.pending()}
+
+
+@app.post("/confirm/{token}/approve")
+def confirm_approve(token: str):
+    from jarvis.core import confirm as confirm_gate
+
+    try:
+        result = confirm_gate.resolve(token)
+    except confirm_gate.ConfirmationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Action failed: {exc}") from exc
+    return {"status": "done", "result": result}
+
+
+@app.post("/confirm/{token}/cancel")
+def confirm_cancel(token: str):
+    from jarvis.core import confirm as confirm_gate
+
+    if not confirm_gate.cancel(token):
+        raise HTTPException(status_code=404, detail="No such pending confirmation.")
+    return {"status": "cancelled"}
+
+
+# ── Undo ──────────────────────────────────────────────────────────────────────
+
+
+@app.get("/undo")
+def undo_history():
+    from jarvis.core import undo as undo_stack
+
+    return {"history": undo_stack.history(), "depth": undo_stack.depth()}
+
+
+@app.post("/undo")
+def undo_last():
+    from jarvis.core import undo as undo_stack
+
+    return {"result": undo_stack.undo_last(), "depth": undo_stack.depth()}
+
+
+# ── Engine ladder + tool discovery diagnostics ────────────────────────────────
+
+
+@app.get("/ladder")
+def ladder_status():
+    from jarvis.engine.ladder import status as ladder_state
+
+    return ladder_state()
+
+
+@app.get("/tools")
+def tools_listing():
+    from jarvis.tools.registry import list_tool_details
+
+    return {"tools": list_tool_details()}
+
+
 @app.get("/v1/models")
 def list_models():
     cfg = JarvisConfig.load()

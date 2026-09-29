@@ -28,7 +28,17 @@ def test_app_launcher_blocks_scripts_and_requires_confirmation(monkeypatch, tmp_
     executable.chmod(0o755)
     added = tool.run(action="add", name="Safe", path=str(executable))
     assert "Added" in added
-    assert "Confirm required" in tool.run(action="launch", app="Safe", confirm=False)
+
+    # An unconfirmed launch must not start anything. The gate is no longer a
+    # `confirm` tool parameter (the model writes those) — the request is parked
+    # in jarvis/core/confirm.py until a human resolves it in the interface.
+    from jarvis.core import confirm as confirm_gate
+
+    confirm_gate.clear()
+    response = tool.run(action="launch", app="Safe", confirm=False)
+    assert "confirmation" in response.lower()
+    assert len(confirm_gate.pending()) == 1, "launch should be parked, not run"
+    confirm_gate.clear()
 
 
 def test_connections_status_uses_local_paths(monkeypatch, tmp_path):
