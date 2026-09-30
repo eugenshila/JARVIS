@@ -51,6 +51,7 @@ if not errorlevel 1 (
   exit /b 0
 )
 
-echo [start_jarvis] Starting JARVIS...
+echo [start_jarvis] Starting JARVIS through the canonical CLI...
+set "JARVIS_CLI=1"
 python main.py
 endlocal
