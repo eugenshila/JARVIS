@@ -57,6 +57,7 @@ web_search_action = _lazy_action("actions.web_search", "web_search")
 computer_control = _lazy_action("actions.computer_control", "computer_control")
 game_updater = _lazy_action("actions.game_updater", "game_updater")
 jautomatic_action = _lazy_action("actions.jautomatic", "jautomatic_action")
+shilatech_action = _lazy_action("actions.shilatech", "shilatech_action")
 request_presentation = _lazy_action("actions.presentation_maker", "request_presentation")
 request_deep_research = _lazy_action("actions.deep_research", "request_deep_research")
 
@@ -368,6 +369,26 @@ def _clean_transcript(text: str) -> str:
     return text.strip()
 
 TOOL_DECLARATIONS = [
+    {
+        "name": "shilatech",
+        "description": (
+            "Controls Shilatech Autospares through actions matching its website departments/pages: dashboard, shop, "
+            "orders, operations, warehouse, delivery, POS, workshop, finance, receivables, payroll, HR, approvals, "
+            "garage, and VIN lookup. Use it for Shilatech inventory, parts, orders, staff operations, and reports. "
+            "Data-changing actions require the user's explicit confirmation."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "section": {"type": "STRING", "enum": ["dashboard", "shop", "orders", "operations", "warehouse", "delivery", "pos", "workshop", "finance", "receivables", "payroll", "hr", "my_hr", "approvals", "garage", "vin"]},
+                "action": {"type": "STRING", "enum": ["view", "list", "search", "lookup", "receipt", "create", "update", "submit", "process"]},
+                "query": {"type": "OBJECT", "description": "API filters, e.g. q, brand, category, inStock, model, year, period, vin, or saleId."},
+                "payload": {"type": "OBJECT", "description": "Exact record data for a mutation. Never include a password."},
+                "confirmed": {"type": "BOOLEAN", "description": "True only after the user explicitly confirms the exact data-changing action."}
+            },
+            "required": ["section", "action"]
+        }
+    },
     {
         "name": "jautomatic",
         "description": (
@@ -1656,6 +1677,10 @@ class JarvisLive:
                     immediate=True,
                 )
                 result   = f"Task started (ID: {task_id})."
+
+            elif name == "shilatech":
+                r = await asyncio.to_thread(lambda: shilatech_action(parameters=args, player=self.ui))
+                result = r or "Shilatech action completed."
 
             elif name == "jautomatic":
                 r = await asyncio.to_thread(lambda: jautomatic_action(parameters=args, player=self.ui))
