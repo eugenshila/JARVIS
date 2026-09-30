@@ -56,6 +56,8 @@ dev_agent = _lazy_action("actions.dev_agent", "dev_agent")
 web_search_action = _lazy_action("actions.web_search", "web_search")
 computer_control = _lazy_action("actions.computer_control", "computer_control")
 game_updater = _lazy_action("actions.game_updater", "game_updater")
+jautomatic_action = _lazy_action("actions.jautomatic", "jautomatic_action")
+shilatech_action = _lazy_action("actions.shilatech", "shilatech_action")
 request_presentation = _lazy_action("actions.presentation_maker", "request_presentation")
 request_deep_research = _lazy_action("actions.deep_research", "request_deep_research")
 
@@ -367,6 +369,56 @@ def _clean_transcript(text: str) -> str:
     return text.strip()
 
 TOOL_DECLARATIONS = [
+    {
+        "name": "shilatech",
+        "description": (
+            "Controls Shilatech Autospares through actions matching its website departments/pages: dashboard, shop, "
+            "orders, operations, warehouse, delivery, POS, workshop, finance, receivables, payroll, HR, approvals, "
+            "garage, and VIN lookup. Use it for Shilatech inventory, parts, orders, staff operations, and reports. "
+            "Data-changing actions require the user's explicit confirmation."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "section": {"type": "STRING", "enum": ["dashboard", "shop", "orders", "operations", "warehouse", "delivery", "pos", "workshop", "finance", "receivables", "payroll", "hr", "my_hr", "approvals", "garage", "vin"]},
+                "action": {"type": "STRING", "enum": ["view", "list", "search", "lookup", "receipt", "create", "update", "submit", "process"]},
+                "query": {"type": "OBJECT", "description": "API filters, e.g. q, brand, category, inStock, model, year, period, vin, or saleId."},
+                "payload": {"type": "OBJECT", "description": "Exact record data for a mutation. Never include a password."},
+                "confirmed": {"type": "BOOLEAN", "description": "True only after the user explicitly confirms the exact data-changing action."}
+            },
+            "required": ["section", "action"]
+        }
+    },
+    {
+        "name": "jautomatic",
+        "description": (
+            "Controls JAUTOMATIC JOB SEARCH through actions matching its tabs: dashboard, profile, "
+            "education, search, applications, sent, archive, tasks, insights, and settings. Use this "
+            "for job searches, match scores, application materials, application tracking, follow-ups, "
+            "job-search analytics, and JAUTOMATIC profile/settings. Never use generic web_search for these."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "tab": {"type": "STRING", "enum": ["dashboard", "profile", "education", "search", "applications", "sent", "archive", "tasks", "insights", "settings"]},
+                "action": {"type": "STRING", "description": "Tab action, such as view, update, search, list, prepare, set_status, interview_prep, draft_follow_up, postpone, analytics, export_csv, or export_calendar."},
+                "query": {"type": "STRING", "description": "Job query for the Search tab."},
+                "location": {"type": "STRING", "description": "Optional job location."},
+                "application_id": {"type": "STRING", "description": "Application ID returned by list/search actions."},
+                "status": {"type": "STRING", "description": "New application status."},
+                "note": {"type": "STRING", "description": "Optional status note."},
+                "values": {"type": "OBJECT", "description": "Profile or settings fields to update."},
+                "days": {"type": "INTEGER", "description": "Days to postpone a follow-up."},
+                "remote_only": {"type": "BOOLEAN"},
+                "min_salary": {"type": "INTEGER"},
+                "limit_per_source": {"type": "INTEGER"},
+                "max_post_age_days": {"type": "INTEGER"},
+                "offline": {"type": "BOOLEAN", "description": "Use JAUTOMATIC's sample source for an offline search."},
+                "data_dir": {"type": "STRING", "description": "Optional alternate JAUTOMATIC workspace."}
+            },
+            "required": ["tab", "action"]
+        }
+    },
     {
         "name": "open_app",
         "description": (
@@ -1625,6 +1677,14 @@ class JarvisLive:
                     immediate=True,
                 )
                 result   = f"Task started (ID: {task_id})."
+
+            elif name == "shilatech":
+                r = await asyncio.to_thread(lambda: shilatech_action(parameters=args, player=self.ui))
+                result = r or "Shilatech action completed."
+
+            elif name == "jautomatic":
+                r = await asyncio.to_thread(lambda: jautomatic_action(parameters=args, player=self.ui))
+                result = r or "JAUTOMATIC action completed."
 
             elif name == "web_search":
                 r = await asyncio.to_thread(lambda: web_search_action(parameters=args, player=self.ui))
