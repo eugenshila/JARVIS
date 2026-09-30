@@ -515,6 +515,48 @@ async def hud_chat(req: HudChatRequest):
     return {"content": result.get("message", {}).get("content", ""), "model": HUD_MODEL}
 
 
+# ── Classic assistant (ported from KKshitiz/J.A.R.V.I.S) ─────────────────────
+#
+# Served under /hud/* so the existing Vite proxy and the MSI's static bundle
+# reach it without new configuration. One router instance per process keeps
+# follow-up questions ("which city, sir?") coherent for the open HUD window.
+
+_classic_router = None
+
+
+def _classic():
+    global _classic_router
+    if _classic_router is None:
+        from jarvis.classic.router import ClassicRouter
+
+        _classic_router = ClassicRouter()
+    return _classic_router
+
+
+class ClassicCommandRequest(BaseModel):
+    command: str
+
+
+@app.get("/hud/classic/commands")
+def hud_classic_commands():
+    from jarvis.classic.router import COMMANDS
+
+    return {"commands": COMMANDS}
+
+
+@app.post("/hud/classic/command")
+async def hud_classic_command(req: ClassicCommandRequest):
+    """Run one classic command. Never blocks the loop: the skills do network
+    and subprocess work, so they run on a thread."""
+    if not req.command.strip():
+        raise HTTPException(status_code=400, detail="A command is required.")
+    try:
+        reply = await asyncio.to_thread(_classic().handle, req.command)
+    except Exception as exc:  # a broken skill must not 500 the HUD
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return reply.to_dict()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": __version__, "time": time.time()}

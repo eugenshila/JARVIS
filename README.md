@@ -58,6 +58,24 @@ Installed software can only be launched through the local app allow-list and
 requires explicit confirmation. The circular reactor is an interface graphic,
 not a live battery or machine diagnostic.
 
+## Classic J.A.R.V.I.S commands
+
+The 2020 voice assistant from
+[KKshitiz/J.A.R.V.I.S](https://github.com/KKshitiz/J.A.R.V.I.S) (MIT) is ported
+into `src/jarvis/classic/`: weather, jokes, notes, screenshots, CPU/RAM/battery
+stats, Google/Wikipedia/YouTube search, translation, music, image OCR and power
+options. It is reachable four ways — `jarvis classic "weather in Oslo"`, the
+`classic_command` agent tool, `POST /hud/classic/command`, and the
+**CLASSIC J.A.R.V.I.S** console in the React interface (top-right of the
+dashboard), which supports browser dictation and spoken replies.
+
+No API keys are needed: weather uses the key-free Open-Meteo service, jokes fall
+back to a built-in list, and every optional dependency is probed at call time.
+Shutdown and restart are never executed from a transcript — they go through the
+confirmation gate and wait for a human click. See
+[docs/CLASSIC_JARVIS.md](docs/CLASSIC_JARVIS.md) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 A small Windows friendly desktop assistant built with Python's standard library. It can browse a local prompt library, prepare meeting briefs from details you paste, copy prompts, and ask an OpenAI compatible chat API to draft a response. The app runs without an API key in copy mode.
 
 ## Run

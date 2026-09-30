@@ -1377,5 +1377,54 @@ def tasks(cancel: str):
     console.print(table)
 
 
+@cli.command()
+@click.argument("command", nargs=-1)
+@click.option("--list", "list_commands", is_flag=True, help="List the classic commands")
+@click.option("--repl", is_flag=True, help="Keep asking, like the original voice loop")
+def classic(command: tuple[str, ...], list_commands: bool, repl: bool):
+    """Classic voice-assistant commands (ported from KKshitiz/J.A.R.V.I.S).
+
+    Examples: jarvis classic "weather in Oslo" / "battery status" / "tell me a joke"
+    """
+    from jarvis.classic.router import COMMANDS, ClassicRouter
+    from jarvis.classic.skills import greet
+
+    if list_commands:
+        table = Table(title="Classic JARVIS commands")
+        table.add_column("Intent", style="cyan")
+        table.add_column("Say")
+        table.add_column("What it does", style="dim")
+        for item in COMMANDS:
+            table.add_row(item["intent"], item["example"], item["description"])
+        console.print(table)
+        return
+
+    router = ClassicRouter()
+    text = " ".join(command).strip()
+
+    if text and not repl:
+        console.print(f"[bold cyan]JARVIS:[/] {router.handle(text).speech}")
+        return
+
+    console.print(Panel.fit(f"[bold cyan]{greet()}[/]\nType a command, or 'help'. Ctrl-C to leave.",
+                            border_style="cyan"))
+    if text:
+        console.print(f"[bold cyan]JARVIS:[/] {router.handle(text).speech}")
+    while True:
+        try:
+            said = console.input("[green]you> [/]").strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[dim]Goodbye, sir.[/]")
+            return
+        if not said:
+            continue
+        reply = router.handle(said)
+        console.print(f"[bold cyan]JARVIS:[/] {reply.speech}")
+        if reply.confirm_token:
+            console.print(f"[yellow]Awaiting confirmation — approve in the HUD or with token {reply.confirm_token}[/]")
+        if reply.data.get("close"):
+            return
+
+
 if __name__ == "__main__":
     cli()
