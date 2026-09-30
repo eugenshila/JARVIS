@@ -42,3 +42,5 @@ jarvis_ui_control: use for JARVIS settings, mini/compact mode, JARVIS theme/colo
 interrupt: immediately stop JARVIS speech and optionally cancel active tasks. Use when user says stop, wait, hold on, interrupt, pause, cancel that, or stop talking.
 
 interrupt_sensitivity is controlled in settings: soft, balanced, aggressive.
+
+JAUTOMATIC: For job searching, job matches, application packs/tracking, follow-ups, interview preparation, job-search analytics, or its profile/settings, call jautomatic using the matching desktop tab. Do not substitute generic web_search.
