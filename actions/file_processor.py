@@ -25,140 +25,51 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
-from google import genai
-
-from actions.jarvis_file_stamp import mark_created_file, write_text_with_stamp
-
+# Model choice, timeout and fallback ladder all live in core/gemini.py.
+from core import gemini
 
 def _get_api_key() -> str:
-    env_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if env_key:
-        return env_key
-
     config_path = Path(__file__).resolve().parent.parent / "config" / "api_keys.json"
-    if config_path.exists():
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f).get("gemini_api_key", "")
-
-    raise RuntimeError("GEMINI_API_KEY not set (set GEMINI_API_KEY env var).")
+    with open(config_path, "r", encoding="utf-8") as f:
+        return json.load(f)["gemini_api_key"]
 
 
-def _gemini_client():
-    return genai.Client(api_key=_get_api_key())
+def _gemini_client(tier: str = gemini.SMART):
+    """Summarising documents and reading images — the reasoning tier, with a
+    long deadline because the input can be a whole file."""
+    class _W:
+        def generate_content(self, contents):
+            resp = gemini.call(contents, tier=tier, timeout_ms=90000)
+            if resp is None:
+                raise RuntimeError("every Gemini model on the ladder failed")
+            return resp
 
-
-def _generate_content(contents, model: str = "gemini-2.5-flash") -> str:
-    response = _gemini_client().models.generate_content(
-        model=model,
-        contents=contents,
-    )
-    return (response.text or "").strip()
-
-
-def _resolve_file_path(file_path: str, player=None) -> Path:
-    raw = str(file_path or "").strip().strip('"').strip("'")
-    if not raw:
-        return Path()
-
-    requested = Path(raw).expanduser()
-    if requested.exists():
-        return requested
-
-    current_file = getattr(player, "current_file", None)
-    if current_file:
-        current = Path(str(current_file)).expanduser()
-        wanted = raw.lower()
-        if (
-            not requested.is_absolute()
-            and current.exists()
-            and wanted in {
-                current.name.lower(),
-                current.stem.lower(),
-                str(current).lower(),
-            }
-        ):
-            return current
-
-    if requested.is_absolute():
-        return requested
-
-    roots = [
-        Path.cwd(),
-        Path(__file__).resolve().parent.parent,
-        Path.home() / "Desktop",
-        Path.home() / "Downloads",
-        Path.home() / "Documents",
-    ]
-    for root in roots:
-        candidate = root / raw
-        if candidate.exists():
-            return candidate
-
-    wanted_lower = raw.lower()
-    for root in roots:
-        if not root.exists():
-            continue
-        try:
-            for child in root.iterdir():
-                if not child.is_file():
-                    continue
-                if child.name.lower() == wanted_lower or child.stem.lower() == wanted_lower:
-                    return child
-        except OSError:
-            continue
-
-    return requested
+    return _W()
 
 
 def _detect_type(path: Path) -> str:
     ext = path.suffix.lower().lstrip(".")
-    image_exts = {
-        "jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif",
-        "svg", "ico", "heic", "heif", "avif", "raw", "cr2", "nef", "arw",
-    }
-    video_exts = {
-        "mp4", "avi", "mov", "mkv", "wmv", "flv", "webm", "m4v", "3gp",
-        "ts", "mts", "m2ts", "vob", "ogv", "rm", "rmvb",
-    }
-    audio_exts = {
-        "mp3", "wav", "ogg", "m4a", "aac", "flac", "wma", "opus",
-        "aiff", "aif", "mid", "midi", "amr", "au",
-    }
-    code_exts = {
-        "py", "js", "jsx", "tsx", "html", "htm", "css", "java", "c",
-        "cpp", "cs", "go", "rs", "rb", "php", "swift", "kt", "sh",
-        "bash", "ps1", "lua", "r", "sql", "yaml", "yml", "toml",
-        "dart", "vue", "scss", "less", "sass", "ipynb", "tf", "hcl",
-        "zig", "nim", "ex", "exs", "clj", "cljs", "elm", "ml", "mli",
-        "fs", "fsx", "jl", "scala", "groovy", "gradle", "cmake",
-        "makefile", "dockerfile", "tf", "bicep", "proto", "graphql",
-        "gql", "svelte", "astro", "coffee", "erb", "haml", "slim",
-        "pug", "jade", "asm", "s", "vhd", "vhdl", "v", "sv",
-    }
-    archive_exts = {"zip", "rar", "tar", "gz", "7z", "bz2", "xz", "tgz", "tbz2", "lz4", "zst"}
-    text_exts = {
-        "txt", "md", "rst", "log", "rtf", "eml", "ics", "vcf",
-        "ini", "cfg", "conf", "config", "env", "nfo", "bat", "cmd",
-        "vbs", "tex", "srt", "vtt", "sub", "ass", "ssa", "lrc",
-        "properties", "gitignore", "gitattributes", "editorconfig",
-        "htaccess", "hosts", "readme", "license", "changelog",
-    }
-    json_exts = {"json", "jsonl", "geojson", "jsonc", "json5"}
+    image_exts = {"jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "svg", "ico"}
+    video_exts = {"mp4", "avi", "mov", "mkv", "wmv", "flv", "webm", "m4v", "3gp"}
+    audio_exts = {"mp3", "wav", "ogg", "m4a", "aac", "flac", "wma", "opus"}
+    code_exts  = {"py", "js", "ts", "jsx", "tsx", "html", "css", "java", "c",
+                  "cpp", "cs", "go", "rs", "rb", "php", "swift", "kt", "sh",
+                  "bash", "ps1", "lua", "r", "m", "sql", "yaml", "toml"}
+    archive_exts = {"zip", "rar", "tar", "gz", "7z", "bz2", "xz"}
 
-    if ext in image_exts:   return "image"
-    if ext in video_exts:   return "video"
-    if ext in audio_exts:   return "audio"
-    if ext in code_exts:    return "code"
+    if ext in image_exts:  return "image"
+    if ext in video_exts:  return "video"
+    if ext in audio_exts:  return "audio"
+    if ext in code_exts:   return "code"
     if ext in archive_exts: return "archive"
-    if ext in text_exts:    return "text"
-    if ext in json_exts:    return "json"
-    if ext == "pdf":        return "pdf"
-    if ext in ("docx", "doc", "odt"): return "docx"
-    if ext in ("csv", "tsv"):         return "csv"
+    if ext == "pdf":       return "pdf"
+    if ext in ("docx", "doc"): return "docx"
+    if ext in ("txt", "md", "rst", "log"): return "text"
+    if ext in ("csv", "tsv"): return "csv"
     if ext in ("xlsx", "xls", "ods"): return "excel"
-    if ext == "xml":                  return "xml"
-    if ext in ("pptx", "ppt", "odp"): return "pptx"
-    # No extension or truly unknown — still try to process
+    if ext == "json":      return "json"
+    if ext == "xml":       return "xml"
+    if ext in ("pptx", "ppt"): return "pptx"
     return "unknown"
 
 
@@ -174,14 +85,6 @@ def _output_path(src: Path, suffix: str, new_ext: str = None) -> Path:
     name = f"{src.stem}_{suffix}{ext}"
     return src.parent / name
 
-
-def _save_text_output(path: Path, content: str, context: str) -> None:
-    write_text_with_stamp(path, content, context)
-
-
-def _mark_created(path: Path, context: str) -> None:
-    mark_created_file(path, context)
-
 def _process_image(path: Path, action: str, params: dict, speak=None) -> str:
     try:
         from PIL import Image
@@ -192,7 +95,7 @@ def _process_image(path: Path, action: str, params: dict, speak=None) -> str:
 
     if action in ("describe", "ocr", "analyze", "read", "extract_text"):
         try:
-            client = _gemini_client()
+            model  = _gemini_client()
             img    = Image.open(path)
             prompt = {
                 "describe": "Describe this image in detail.",
@@ -205,15 +108,12 @@ def _process_image(path: Path, action: str, params: dict, speak=None) -> str:
             if params.get("instruction"):
                 prompt = params["instruction"]
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[prompt, img]
-            )
+            response = model.generate_content([prompt, img])
             result   = response.text.strip()
 
             if len(result) > 500 and params.get("save", True):
                 out = _output_path(path, "result", ".txt")
-                _save_text_output(out, result, f"AI image {action} result generated by JARVIS from {path.name}.")
+                out.write_text(result, encoding="utf-8")
                 return f"{result[:300]}...\n\nFull result saved to: {out}"
             return result
         except Exception as e:
@@ -238,7 +138,6 @@ def _process_image(path: Path, action: str, params: dict, speak=None) -> str:
                 return "Please specify width, height, or scale."
             out = _output_path(path, f"resized_{new_size[0]}x{new_size[1]}")
             img.resize(new_size, Image.LANCZOS).save(out)
-            _mark_created(out, f"Image resized by JARVIS from {path.name}.")
             return f"Resized from {w}x{h} to {new_size[0]}x{new_size[1]}. Saved: {out.name}"
         except Exception as e:
             return f"Resize failed: {e}"
@@ -252,7 +151,6 @@ def _process_image(path: Path, action: str, params: dict, speak=None) -> str:
             img = Image.open(path).convert("RGB") if fmt == "jpg" else Image.open(path)
             out = _output_path(path, "converted", f".{fmt}")
             img.save(out, pil_fmt)
-            _mark_created(out, f"Image converted by JARVIS from {path.name} to {fmt.upper()}.")
             return f"Converted to {fmt.upper()}. Saved: {out.name}"
         except Exception as e:
             return f"Convert failed: {e}"
@@ -263,7 +161,6 @@ def _process_image(path: Path, action: str, params: dict, speak=None) -> str:
             img = Image.open(path).convert("RGB")
             out = _output_path(path, f"compressed_q{quality}", ".jpg")
             img.save(out, "JPEG", quality=quality, optimize=True)
-            _mark_created(out, f"Image compressed by JARVIS from {path.name} at quality {quality}.")
             before = _file_size_str(path)
             after  = _file_size_str(out)
             return f"Compressed: {before} → {after}. Saved: {out.name}"
@@ -308,7 +205,7 @@ def _process_pdf(path: Path, action: str, params: dict, speak=None) -> str:
 
         if action == "extract_text":
             out = _output_path(path, "text", ".txt")
-            _save_text_output(out, text, f"Text extracted by JARVIS from PDF {path.name}.")
+            out.write_text(text, encoding="utf-8")
             return f"Text extracted ({len(text)} chars). Saved: {out.name}"
 
         prompt_map = {
@@ -318,15 +215,12 @@ def _process_pdf(path: Path, action: str, params: dict, speak=None) -> str:
             "reformat":       f"Reformat this text cleanly with proper structure:\n\n{text}",
         }
         try:
-            client    = _gemini_client()
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[prompt_map.get(action, f"Analyze:\n\n{text}")]
-            )
+            model    = _gemini_client()
+            response = model.generate_content(prompt_map.get(action, f"Analyze:\n\n{text}"))
             result   = response.text.strip()
             if len(result) > 600 and params.get("save", True):
                 out = _output_path(path, action, ".txt")
-                _save_text_output(out, result, f"PDF {action} generated by JARVIS from {path.name}.")
+                out.write_text(result, encoding="utf-8")
                 return f"{result[:400]}...\n\nFull result saved: {out.name}"
             return result
         except Exception as e:
@@ -354,7 +248,6 @@ def _process_pdf(path: Path, action: str, params: dict, speak=None) -> str:
                     doc.add_paragraph(para.strip())
             out = _output_path(path, "converted", ".docx")
             doc.save(out)
-            _mark_created(out, f"Word document converted by JARVIS from PDF {path.name}.")
             return f"Converted to Word document. Saved: {out.name}"
         except ImportError:
             return "python-docx not installed. Run: pip install python-docx"
@@ -391,7 +284,7 @@ def _process_text_doc(path: Path, file_type: str, action: str,
     if action == "extract_text":
         if file_type != "txt":
             out = _output_path(path, "extracted", ".txt")
-            _save_text_output(out, content, f"Text extracted by JARVIS from {path.name}.")
+            out.write_text(content, encoding="utf-8")
             return f"Text extracted. Saved: {out.name}"
         return content[:2000]
 
@@ -412,15 +305,12 @@ def _process_text_doc(path: Path, file_type: str, action: str,
         instruction = action
 
     try:
-        client    = _gemini_client()
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[prompt_map[action]]
-        )
+        model    = _gemini_client()
+        response = model.generate_content(prompt_map[action])
         result   = response.text.strip()
         if len(result) > 600 and params.get("save", True):
             out = _output_path(path, action, ".txt")
-            _save_text_output(out, result, f"Text document {action} generated by JARVIS from {path.name}.")
+            out.write_text(result, encoding="utf-8")
             return f"{result[:400]}...\n\nFull result saved: {out.name}"
         return result
     except Exception as e:
@@ -462,7 +352,9 @@ def _process_data(path: Path, file_type: str, action: str,
                    f"Rows: {len(df)}\nPreview:\n{preview}\n\n"
                    f"Give insights, patterns, and notable findings.")
         try:
-            return _generate_content([prompt])
+            model    = _gemini_client()
+            response = model.generate_content(prompt)
+            return response.text.strip()
         except Exception as e:
             return f"AI analysis failed: {e}"
 
@@ -473,15 +365,12 @@ def _process_data(path: Path, file_type: str, action: str,
             if fmt == "csv":
                 out = _output_path(path, "converted", ".csv")
                 df.to_csv(out, index=False, encoding="utf-8")
-                _mark_created(out, f"CSV converted by JARVIS from {path.name}.")
             elif fmt == "xlsx":
                 out = _output_path(path, "converted", ".xlsx")
                 df.to_excel(out, index=False)
-                _mark_created(out, f"Excel workbook converted by JARVIS from {path.name}.")
             elif fmt == "json":
                 out = _output_path(path, "converted", ".json")
                 df.to_json(out, orient="records", force_ascii=False, indent=2)
-                _mark_created(out, f"JSON data converted by JARVIS from {path.name}.")
             return f"Converted to {fmt.upper()}. Saved: {out.name}"
         except Exception as e:
             return f"Convert failed: {e}"
@@ -500,7 +389,6 @@ def _process_data(path: Path, file_type: str, action: str,
             else:                         filtered = df[df[col] == value]
             out = _output_path(path, "filtered", ".csv")
             filtered.to_csv(out, index=False)
-            _mark_created(out, f"Filtered CSV generated by JARVIS from {path.name}.")
             return f"Filtered: {len(filtered)} rows match. Saved: {out.name}"
         except Exception as e:
             return f"Filter failed: {e}"
@@ -512,16 +400,17 @@ def _process_data(path: Path, file_type: str, action: str,
             sorted_df = df.sort_values(col, ascending=asc)
             out = _output_path(path, "sorted", path.suffix)
             sorted_df.to_csv(out, index=False)
-            _mark_created(out, f"Sorted data file generated by JARVIS from {path.name}.")
             return f"Sorted by '{col}'. Saved: {out.name}"
         except Exception as e:
             return f"Sort failed: {e}"
 
     preview = df.head(30).to_string()
     try:
-        return _generate_content([
+        model    = _gemini_client()
+        response = model.generate_content(
             f"Task: {action}\nDataset ({len(df)} rows, cols: {list(df.columns)}):\n{preview}"
-        ])
+        )
+        return response.text.strip()
     except Exception as e:
         return f"Processing failed: {e}"
 
@@ -540,7 +429,6 @@ def _process_json(path: Path, action: str, params: dict, speak=None) -> str:
     if action == "format":
         out = _output_path(path, "formatted", ".json")
         out.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        _mark_created(out, f"Formatted JSON generated by JARVIS from {path.name}.")
         return f"Formatted JSON saved: {out.name}"
 
     if action in ("analyze", "summarize", "extract"):
@@ -549,7 +437,9 @@ def _process_json(path: Path, action: str, params: dict, speak=None) -> str:
         if params.get("instruction"):
             prompt = f"{params['instruction']}\n\nJSON data:\n{preview}"
         try:
-            return _generate_content([prompt])
+            model    = _gemini_client()
+            response = model.generate_content(prompt)
+            return response.text.strip()
         except Exception as e:
             return f"AI processing failed: {e}"
 
@@ -560,7 +450,6 @@ def _process_json(path: Path, action: str, params: dict, speak=None) -> str:
                 df  = pd.DataFrame(data)
                 out = _output_path(path, "converted", ".csv")
                 df.to_csv(out, index=False)
-                _mark_created(out, f"CSV converted by JARVIS from JSON file {path.name}.")
                 return f"Converted to CSV. Saved: {out.name}"
             return "JSON must be an array of objects to convert to CSV."
         except ImportError:
@@ -612,13 +501,15 @@ def _process_code(path: Path, action: str, params: dict, speak=None) -> str:
         prompt = prompt_map[action]
 
     try:
-        result = _generate_content([prompt])
+        model    = _gemini_client()
+        response = model.generate_content(prompt)
+        result   = response.text.strip()
 
         if action in ("fix", "optimize", "document") and params.get("save", True):
             out = _output_path(path, action)
             code_match = re.search(r"```(?:\w+)?\n(.*?)```", result, re.DOTALL)
             code_to_save = code_match.group(1) if code_match else result
-            _save_text_output(out, code_to_save, f"Code {action} generated by JARVIS from {path.name}.")
+            out.write_text(code_to_save, encoding="utf-8")
             return f"{result[:400]}...\n\nSaved: {out.name}"
         return result
     except Exception as e:
@@ -644,19 +535,21 @@ def _process_audio(path: Path, action: str, params: dict, speak=None) -> str:
 
     if action == "transcribe":
         try:
+            model   = _gemini_client()
             content = path.read_bytes()
             mime    = {
                 "mp3": "audio/mp3", "wav": "audio/wav",
                 "ogg": "audio/ogg", "m4a": "audio/mp4",
                 "aac": "audio/aac", "flac": "audio/flac",
             }.get(path.suffix.lstrip(".").lower(), "audio/mpeg")
-            result = _generate_content([
+            response = model.generate_content([
                 "Transcribe all speech in this audio file accurately.",
                 {"mime_type": mime, "data": content}
             ])
+            result = response.text.strip()
             if params.get("save", True):
                 out = _output_path(path, "transcript", ".txt")
-                _save_text_output(out, result, f"Audio transcript generated by JARVIS from {path.name}.")
+                out.write_text(result, encoding="utf-8")
                 return f"Transcription saved: {out.name}\n\nPreview: {result[:300]}"
             return result
         except Exception as e:
@@ -669,7 +562,6 @@ def _process_audio(path: Path, action: str, params: dict, speak=None) -> str:
             audio = AudioSegment.from_file(path)
             out   = _output_path(path, "converted", f".{fmt}")
             audio.export(out, format=fmt)
-            _mark_created(out, f"Audio converted by JARVIS from {path.name} to {fmt.upper()}.")
             return f"Converted to {fmt.upper()}. Saved: {out.name}"
         except ImportError:
             return "pydub not installed. Run: pip install pydub"
@@ -686,7 +578,6 @@ def _process_audio(path: Path, action: str, params: dict, speak=None) -> str:
             trimmed = audio[int(start * 1000):end_ms]
             out     = _output_path(path, f"trim_{int(start)}s_{int(end)}s")
             trimmed.export(out, format=path.suffix.lstrip("."))
-            _mark_created(out, f"Audio trimmed by JARVIS from {path.name}.")
             return f"Trimmed audio ({int(start)}s–{int(end)}s). Saved: {out.name}"
         except ImportError:
             return "pydub not installed."
@@ -736,7 +627,6 @@ def _process_video(path: Path, action: str, params: dict, speak=None) -> str:
                 ["ffmpeg", "-i", str(path), "-q:a", "0", "-map", "a", str(out), "-y"],
                 capture_output=True, timeout=300
             )
-            _mark_created(out, f"Audio extracted by JARVIS from video {path.name}.")
             return f"Audio extracted. Saved: {out.name}"
         except Exception as e:
             return f"Extract audio failed: {e}"
@@ -753,7 +643,6 @@ def _process_video(path: Path, action: str, params: dict, speak=None) -> str:
                 cmd += ["-to", str(end)]
             cmd += ["-c", "copy", str(out), "-y"]
             subprocess.run(cmd, capture_output=True, timeout=600)
-            _mark_created(out, f"Video trimmed by JARVIS from {path.name}.")
             return f"Trimmed video saved: {out.name}"
         except Exception as e:
             return f"Trim failed: {e}"
@@ -769,7 +658,6 @@ def _process_video(path: Path, action: str, params: dict, speak=None) -> str:
                  "-vframes", "1", str(out), "-y"],
                 capture_output=True, timeout=30
             )
-            _mark_created(out, f"Video frame extracted by JARVIS from {path.name} at {timestamp}.")
             return f"Frame extracted at {timestamp}. Saved: {out.name}"
         except Exception as e:
             return f"Extract frame failed: {e}"
@@ -787,7 +675,6 @@ def _process_video(path: Path, action: str, params: dict, speak=None) -> str:
                  str(out), "-y"],
                 capture_output=True, timeout=1800
             )
-            _mark_created(out, f"Video compressed by JARVIS from {path.name} with CRF {crf}.")
             before = _file_size_str(path)
             after  = _file_size_str(out)
             return f"Compressed: {before} → {after}. Saved: {out.name}"
@@ -822,7 +709,6 @@ def _process_video(path: Path, action: str, params: dict, speak=None) -> str:
                 ["ffmpeg", "-i", str(path), str(out), "-y"],
                 capture_output=True, timeout=1800
             )
-            _mark_created(out, f"Video converted by JARVIS from {path.name} to {fmt.upper()}.")
             return f"Converted to {fmt.upper()}. Saved: {out.name}"
         except Exception as e:
             return f"Convert failed: {e}"
@@ -855,9 +741,6 @@ def _process_archive(path: Path, action: str, params: dict, speak=None) -> str:
         dest.mkdir(parents=True, exist_ok=True)
         try:
             shutil.unpack_archive(path, dest)
-            for child in dest.rglob("*"):
-                if child.is_file() and not child.name.endswith(".jarvis_meta.json"):
-                    _mark_created(child, f"Extracted by JARVIS from archive {path.name}.")
             return f"Extracted to: {dest}"
         except Exception as e:
             return f"Extract failed: {e}"
@@ -886,107 +769,24 @@ def _process_pptx(path: Path, action: str, params: dict, speak=None) -> str:
         text = _read_pptx_text()
         if action == "extract_text":
             out = _output_path(path, "text", ".txt")
-            _save_text_output(out, text, f"Presentation text extracted by JARVIS from {path.name}.")
+            out.write_text(text, encoding="utf-8")
             return f"Text extracted. Saved: {out.name}"
         try:
+            model    = _gemini_client()
             prompt   = f"{'Summarize' if action == 'summarize' else 'Analyze'} this presentation:\n{text[:30000]}"
-            return _generate_content([prompt])
+            response = model.generate_content(prompt)
+            return response.text.strip()
         except Exception as e:
             return f"AI processing failed: {e}"
 
     return f"Unknown PPTX action: '{action}'. Try: summarize, extract_text, analyze"
-
-def _process_unknown(path: Path, action: str, params: dict, speak=None) -> str:
-    """Universal fallback: tries text read → Gemini File API upload → binary summary."""
-    instruction = params.get("instruction", "").strip()
-    task = instruction or action or "Describe what this file contains and summarize its contents in detail."
-
-    # --- Tier 1: Try reading as UTF-8 text ---
-    try:
-        raw = path.read_bytes()
-        # Heuristic: if fewer than 10% of the first 8KB are non-printable bytes, treat as text
-        sample = raw[:8192]
-        non_printable = sum(1 for b in sample if b < 9 or (13 < b < 32) or b == 127)
-        is_text = (non_printable / max(len(sample), 1)) < 0.10
-
-        if is_text:
-            content = raw.decode("utf-8", errors="replace")
-            # Send up to 50,000 chars — enough for large text files
-            preview = content[:50000]
-            truncated = len(content) > 50000
-            prompt = (
-                f"File name: {path.name}\n"
-                f"File type: {path.suffix or 'no extension'}\n"
-                f"{'[Content truncated to first 50,000 characters]' if truncated else ''}\n\n"
-                f"Content:\n{preview}\n\n"
-                f"Task: {task}"
-            )
-            result = _generate_content([prompt])
-            if truncated:
-                result += f"\n\n(Note: file was {_file_size_str(path)} — only first 50,000 characters were analysed.)"
-            return result
-    except Exception:
-        pass
-
-    # --- Tier 2: Upload via Gemini File API (handles binary formats natively) ---
-    try:
-        client = _gemini_client()
-        print(f"[FileProcessor] Uploading {path.name} via Gemini File API...")
-        uploaded = client.files.upload(
-            file=str(path),
-            config={"display_name": path.name},
-        )
-
-        # Wait for processing
-        for _ in range(30):
-            f = client.files.get(name=uploaded.name)
-            state = getattr(getattr(f, "state", None), "name", getattr(f, "state", ""))
-            if str(state).upper().endswith("ACTIVE"):
-                uploaded = f
-                break
-            if str(state).upper().endswith("FAILED"):
-                raise RuntimeError("Gemini File API processing failed")
-            time.sleep(2)
-
-        result = _generate_content([
-            f"File name: {path.name}\nTask: {task}",
-            uploaded,
-        ])
-        # Clean up uploaded file
-        try:
-            client.files.delete(name=uploaded.name)
-        except Exception:
-            pass
-        return result
-    except Exception as e:
-        print(f"[FileProcessor] File API upload failed: {e}")
-
-    # --- Tier 3: Binary summary as last resort ---
-    try:
-        size = path.stat().st_size
-        raw = path.read_bytes()
-        magic = raw[:16].hex(" ").upper()
-        prompt = (
-            f"I have a binary file named '{path.name}' ({_file_size_str(path)}, {size} bytes).\n"
-            f"First 16 bytes (hex): {magic}\n"
-            f"Based on the file name, extension, and magic bytes, describe what this file likely is, "
-            f"what program opens it, and what information it might contain.\n"
-            f"Task: {task}"
-        )
-        return _generate_content([prompt])
-    except Exception as e:
-        return (
-            f"Could not read '{path.name}' ({path.suffix}). "
-            f"The file may be encrypted, corrupted, or in a proprietary binary format. Error: {e}"
-        )
-
 
 def file_processor(parameters: dict, player=None, speak=None) -> str:
     file_path_str = parameters.get("file_path", "").strip()
     if not file_path_str:
         return "No file path provided."
 
-    path = _resolve_file_path(file_path_str, player)
+    path = Path(file_path_str)
     if not path.exists():
         return f"File not found: {file_path_str}"
     if not path.is_file():
@@ -1002,6 +802,16 @@ def file_processor(parameters: dict, player=None, speak=None) -> str:
     if player:
         player.write_log(log_msg)
 
+    if file_type == "unknown":
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")[:10000]
+            model   = _gemini_client()
+            prompt  = f"File: {path.name}\nContent preview:\n{content}\n\nTask: {action or instruction or 'Describe what this file contains and what can be done with it.'}"
+            response = model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            return f"Unknown file type ({path.suffix}). Could not process: {e}"
+
     dispatch = {
         "image":   _process_image,
         "pdf":     _process_pdf,
@@ -1010,16 +820,17 @@ def file_processor(parameters: dict, player=None, speak=None) -> str:
         "csv":     lambda p, a, pm, s: _process_data(p, "csv",   a, pm, s),
         "excel":   lambda p, a, pm, s: _process_data(p, "excel", a, pm, s),
         "json":    _process_json,
-        "xml":     lambda p, a, pm, s: _process_json(p, a, pm, s),
+        "xml":     lambda p, a, pm, s: _process_json(p, a, pm, s),  
         "code":    _process_code,
         "audio":   _process_audio,
         "video":   _process_video,
         "archive": _process_archive,
         "pptx":    _process_pptx,
-        "unknown": _process_unknown,
     }
 
-    handler = dispatch.get(file_type, _process_unknown)
+    handler = dispatch.get(file_type)
+    if not handler:
+        return f"Unsupported file type: {file_type}"
 
     try:
         result = handler(path, action, params, speak)
@@ -1028,3 +839,85 @@ def file_processor(parameters: dict, player=None, speak=None) -> str:
         import traceback
         traceback.print_exc()
         return f"Processing failed: {e}"
+
+
+# ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
+TOOL = {
+    "name": "file_processor",
+    "description": "Processes any file that the user has uploaded or dropped onto the interface. Use this when the user refers to an uploaded file and wants an action on it. Supports: images (describe/ocr/resize/compress/convert), PDFs (summarize/extract_text/to_word), Word docs & text files (summarize/fix/reformat/translate), CSV/Excel (analyze/stats/filter/sort/convert), JSON/XML (validate/format/analyze), code files (explain/review/fix/optimize/run/document/test), audio (transcribe/trim/convert/info), video (trim/extract_audio/extract_frame/compress/transcribe/info), archives (list/extract), presentations (summarize/extract_text). ALWAYS call this tool when a file has been uploaded and the user gives a command about it. If the user's command is ambiguous, pick the most logical action for that file type.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "file_path": {
+                "type": "STRING",
+                "description": "Full path to the uploaded file. Leave empty to use the currently uploaded file."
+            },
+            "action": {
+                "type": "STRING",
+                "description": "What to do with the file. Examples by type:\nimage: describe | ocr | resize | compress | convert | info\npdf: summarize | extract_text | to_word | info\ndocx/txt: summarize | fix | reformat | translate_hint | word_count | to_bullet\ncsv/excel: analyze | stats | filter | sort | convert | info\njson: validate | format | analyze | to_csv\ncode: explain | review | fix | optimize | run | document | test\naudio: transcribe | trim | convert | info\nvideo: trim | extract_audio | extract_frame | compress | transcribe | info | convert\narchive: list | extract\npptx: summarize | extract_text | analyze"
+            },
+            "instruction": {
+                "type": "STRING",
+                "description": "Free-form instruction if action doesn't cover it. E.g. 'translate this to Turkish', 'find all email addresses'"
+            },
+            "format": {
+                "type": "STRING",
+                "description": "Target format for conversion. E.g. 'mp3', 'pdf', 'csv', 'png'"
+            },
+            "width": {
+                "type": "INTEGER",
+                "description": "Target width for image resize"
+            },
+            "height": {
+                "type": "INTEGER",
+                "description": "Target height for image resize"
+            },
+            "scale": {
+                "type": "NUMBER",
+                "description": "Scale factor for image resize (e.g. 0.5)"
+            },
+            "quality": {
+                "type": "INTEGER",
+                "description": "Quality 1-100 for image/video compress"
+            },
+            "start": {
+                "type": "STRING",
+                "description": "Start time for trim: seconds or HH:MM:SS"
+            },
+            "end": {
+                "type": "STRING",
+                "description": "End time for trim: seconds or HH:MM:SS"
+            },
+            "timestamp": {
+                "type": "STRING",
+                "description": "Timestamp for video frame extraction HH:MM:SS"
+            },
+            "column": {
+                "type": "STRING",
+                "description": "Column name for CSV filter/sort"
+            },
+            "value": {
+                "type": "STRING",
+                "description": "Filter value for CSV filter"
+            },
+            "condition": {
+                "type": "STRING",
+                "description": "Filter condition: equals|contains|gt|lt"
+            },
+            "ascending": {
+                "type": "BOOLEAN",
+                "description": "Sort order for CSV sort (default: true)"
+            },
+            "save": {
+                "type": "BOOLEAN",
+                "description": "Save result to file (default: true)"
+            },
+            "destination": {
+                "type": "STRING",
+                "description": "Output folder for archive extract"
+            }
+        },
+        "required": []
+    },
+    "handler": file_processor,
+}

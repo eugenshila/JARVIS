@@ -1,28 +1,19 @@
+"""
+Screen & webcam capture for JARVIS vision.
+
+Provides the two capture entry points main.py uses — `_capture_screen()` and
+`_capture_camera()` — plus their helpers (compression, camera auto-detection,
+config access). main.py grabs a frame here on demand, then injects it into the
+main Gemini Live session; there is no separate vision session here.
+"""
 from __future__ import annotations
 
-import asyncio
-import base64
 import io
 import json
-import os
-import re
 import sys
-import threading
-import time
 from pathlib import Path
-from typing import Optional
-
-from memory.config_manager import get_gemini_key
 
 import numpy as np
-import sounddevice as sd
-
-def _get_voice_name() -> str:
-    """Read voice name dynamically so it picks up runtime changes."""
-    v = os.environ.get("GEMINI_VOICE_NAME", "").strip().lower()
-    return v if v else "puck"
-
-DEFAULT_VOICE_NAME = _get_voice_name()
 
 try:
     import cv2
@@ -43,8 +34,6 @@ try:
 except ImportError:
     _PIL = False
 
-from google import genai
-from google.genai import types as gtypes
 
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -72,37 +61,13 @@ def _save_config_key(key: str, value) -> None:
         print(f"[Vision] ⚠️  Could not save config key '{key}': {e}")
 
 
-def _get_api_key() -> str:
-    key = get_gemini_key()
-    if not key:
-        raise RuntimeError("GEMINI_API_KEY not set (set GEMINI_API_KEY env var).")
-    return key
-
-
 def _get_os() -> str:
     return _load_config().get("os_system", "windows").lower()
 
-_LIVE_MODEL         = "models/gemini-2.5-flash-native-audio-preview-12-2025"
-_CHANNELS           = 1
-_RECEIVE_SAMPLE_RATE = 24_000
-_CHUNK_SIZE         = 1_024
 
-_IMG_MAX_W = 1600
-_IMG_MAX_H = 1000
+_IMG_MAX_W = 1280
+_IMG_MAX_H = 720
 _JPEG_Q    = 82
-
-_last_capture_time = 0.0
-_MIN_CAPTURE_INTERVAL = 0.5  # seconds
-
-_SYSTEM_PROMPT = (
-    "You are JARVIS, an advanced AI assistant. "
-    "Analyze the provided image with precision and intelligence. "
-    "Be concise and direct — maximum two sentences unless the user's question "
-    "requires more detail. "
-    "Address the user respectfully. "
-    "Only state text, names, buttons, or UI details that are legible in the image. "
-    "If something is unclear, say that it is unclear instead of guessing."
-)
 
 
 def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]:
@@ -118,6 +83,7 @@ def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]
     except Exception as e:
         print(f"[Vision] ⚠️  Image compress failed: {e}")
         return img_bytes, f"image/{source_format.lower()}"
+
 
 def _capture_screen() -> tuple[bytes, str]:
 
@@ -139,13 +105,13 @@ def _cv2_backend() -> int:
         return 0
     os_name = _get_os()
     if os_name == "windows":
-        return cv2.CAP_DSHOW    
+        return cv2.CAP_DSHOW
     if os_name == "mac":
-        return cv2.CAP_AVFOUNDATION  
+        return cv2.CAP_AVFOUNDATION
     return cv2.CAP_ANY
 
 
-def _probe_camera(index: int, backend: int, warmup: int = 2) -> bool:
+def _probe_camera(index: int, backend: int, warmup: int = 5) -> bool:
 
     if not _CV2:
         return False
@@ -196,7 +162,7 @@ def _capture_camera() -> tuple[bytes, str]:
     if not cap.isOpened():
         raise RuntimeError(f"Camera index {index} could not be opened.")
 
-    for _ in range(3):
+    for _ in range(10):
         cap.read()
 
     ret, frame = cap.read()
@@ -215,356 +181,3 @@ def _capture_camera() -> tuple[bytes, str]:
 
     _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_Q])
     return buf.tobytes(), "image/jpeg"
-
-
-def _direct_vision_answer(image_bytes: bytes, mime_type: str, user_text: str) -> str:
-    client = genai.Client(api_key=_get_api_key())
-    prompt = (
-        f"{_SYSTEM_PROMPT}\n\n"
-        "For screen analysis, prioritize visible on-screen text and exact UI state. "
-        "Do not identify people, recipients, or accounts unless the name is clearly readable. "
-        "If multiple names are visible, distinguish the active chat/header from side-list names. "
-        "Answer the user's question directly.\n\n"
-        f"User question: {user_text}"
-    )
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            gtypes.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            prompt,
-        ],
-    )
-
-    text = (getattr(response, "text", "") or "").strip()
-    if not text:
-        raise RuntimeError("Gemini returned no text for the screen image.")
-    return re.sub(r"\s+", " ", text).strip()
-
-class _VisionSession:
-    def __init__(self):
-        self._loop:       Optional[asyncio.AbstractEventLoop] = None
-        self._thread:     Optional[threading.Thread]          = None
-        self._session                                          = None
-        self._out_queue:  Optional[asyncio.Queue]             = None
-        self._audio_in:   Optional[asyncio.Queue]             = None
-        self._ready_evt:  threading.Event                     = threading.Event()
-        self._player                                           = None
-        self._lock:       threading.Lock                       = threading.Lock()
-        self._result_fut:   Optional[asyncio.Future]          = None
-        self._result_lock:  threading.Lock                       = threading.Lock()
-
-    def start(self, player=None, timeout: float = 15.0) -> None:
-        with self._lock:
-            if self._thread and self._thread.is_alive():
-                if player is not None:
-                    self._player = player
-                return
-            self._player = player
-            self._thread = threading.Thread(
-                target=self._run_event_loop,
-                daemon=True,
-                name="VisionSessionThread",
-            )
-            self._thread.start()
-
-        if not self._ready_evt.wait(timeout=timeout):
-            raise RuntimeError(f"Vision session did not connect within {timeout}s.")
-        print("[Vision] ✅ Session ready")
-
-    def analyze(self, image_bytes: bytes, mime_type: str, user_text: str) -> None:
-        if not self._loop or not self._out_queue:
-            print("[Vision] ⚠️  Session not started — dropping request")
-            return
-        asyncio.run_coroutine_threadsafe(
-            self._out_queue.put((image_bytes, mime_type, user_text)),
-            self._loop,
-        )
-
-    def request(self, image_bytes: bytes, mime_type: str, user_text: str, timeout: float = 8.0) -> Optional[str]:
-        if not self._loop or not self._out_queue:
-            print("[Vision] ⚠️  Session not started — dropping request")
-            return None
-        # Create a future bound to the vision session's event loop
-        async def _make_future():
-            return asyncio.Future()
-        fut = asyncio.run_coroutine_threadsafe(_make_future(), self._loop).result()
-        with self._result_lock:
-            self._result_fut = fut
-        asyncio.run_coroutine_threadsafe(
-            self._out_queue.put((image_bytes, mime_type, user_text)),
-            self._loop,
-        )
-        # Wait for the future with a timeout using the vision loop
-        async def _wait_with_timeout(f, t):
-            return await asyncio.wait_for(f, t)
-        wait_fut = asyncio.run_coroutine_threadsafe(_wait_with_timeout(fut, timeout), self._loop)
-        try:
-            return wait_fut.result()
-        except asyncio.TimeoutError:
-            print("[Vision] ⚠️  No response from model within timeout")
-            return None
-        except Exception as e:
-            print(f"[Vision] ⚠️  Error waiting for vision result: {e}")
-            return None
-        finally:
-            with self._result_lock:
-                self._result_fut = None
-
-    def is_ready(self) -> bool:
-        return self._session is not None
-
-    def _run_event_loop(self) -> None:
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-        self._loop.run_until_complete(self._session_loop())
-
-    async def _session_loop(self) -> None:
-        self._out_queue = asyncio.Queue(maxsize=30)
-        self._audio_in  = asyncio.Queue()
-
-        client = genai.Client(
-            api_key=_get_api_key(),
-            http_options={"api_version": "v1beta"},
-        )
-
-        backoff = 2.0
-        while True:
-            # Build config each reconnect to pick up voice changes
-            voice = _get_voice_name()
-            config = gtypes.LiveConnectConfig(
-                response_modalities=["AUDIO"],
-                output_audio_transcription={},
-                system_instruction=_SYSTEM_PROMPT,
-                speech_config=gtypes.SpeechConfig(
-                    voice_config=gtypes.VoiceConfig(
-                        prebuilt_voice_config=gtypes.PrebuiltVoiceConfig(
-                            voice_name=voice
-                        )
-                    )
-                ),
-            )
-            try:
-                print("[Vision] 🔌 Connecting...")
-                async with client.aio.live.connect(
-                    model=_LIVE_MODEL, config=config
-                ) as session:
-                    self._session = session
-                    self._ready_evt.set()
-                    backoff = 2.0  
-                    print("[Vision] ✅ Connected")
-
-                    async with asyncio.TaskGroup() as tg:
-                        tg.create_task(self._send_loop())
-                        tg.create_task(self._recv_loop())
-                        tg.create_task(self._play_loop())
-
-            except* Exception as eg:
-                for exc in eg.exceptions:
-                    print(f"[Vision] ⚠️  Session error: {exc}")
-            finally:
-                self._session = None
-                self._ready_evt.clear()
-
-            print(f"[Vision] 🔄 Reconnecting in {backoff:.0f}s...")
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 1.3, 15.0)
-            self._ready_evt.set()  
-
-    async def _send_loop(self) -> None:
-        while True:
-            try:
-                image_bytes, mime_type, user_text = await asyncio.wait_for(self._out_queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
-                continue
-            if not self._session:
-                print("[Vision] ⚠️  No session — dropping image")
-                continue
-            try:
-                b64 = base64.b64encode(image_bytes).decode("ascii")
-                await self._session.send_client_content(
-                    turns={
-                        "parts": [
-                            {"inline_data": {"mime_type": mime_type, "data": b64}},
-                            {"text": user_text},
-                        ]
-                    },
-                    turn_complete=True,
-                )
-                print(f"[Vision] 📤 Sent {len(image_bytes):,} bytes — '{user_text[:60]}'")
-            except Exception as e:
-                print(f"[Vision] ⚠️  Send error: {e}")
-
-    async def _recv_loop(self) -> None:
-        transcript: list[str] = []
-        while True:
-            try:
-                async for response in self._session.receive():
-                    if response.data:
-                        await self._audio_in.put(response.data)
-
-                    sc = response.server_content
-                    if not sc:
-                        continue
-
-                    if sc.output_transcription and sc.output_transcription.text:
-                        chunk = sc.output_transcription.text.strip()
-                        if chunk:
-                            transcript.append(chunk)
-
-                    if sc.turn_complete:
-                        result_text = ""
-                        if transcript:
-                            result_text = re.sub(r"\s+", " ", " ".join(transcript)).strip()
-                        if result_text and self._player:
-                            self._player.write_log(f"Jarvis: {result_text}")
-                            print(f"[Vision] 💬 {result_text}")
-                        # Set result for the pending request
-                        with self._result_lock:
-                            if self._result_fut and not self._result_fut.done():
-                                self._result_fut.set_result(result_text)
-                        transcript = []
-
-                # Iterator exhausted — session closed by server, raise to trigger reconnect
-                print("[Vision] ⚠️  Receive stream ended — will reconnect")
-                raise RuntimeError("Receive stream ended")
-
-            except Exception as e:
-                print(f"[Vision] ⚠️  Recv error: {e}")
-                raise
-
-    async def _play_loop(self) -> None:
-        stream = sd.RawOutputStream(
-            samplerate=_RECEIVE_SAMPLE_RATE,
-            channels=_CHANNELS,
-            dtype="int16",
-            blocksize=_CHUNK_SIZE,
-        )
-        stream.start()
-        try:
-            while True:
-                chunk = await self._audio_in.get()
-                await asyncio.to_thread(stream.write, chunk)
-        except Exception as e:
-            print(f"[Vision] ❌ Play error: {e}")
-            raise
-        finally:
-            stream.stop()
-            stream.close()
-
-_session      = _VisionSession()
-_session_lock = threading.Lock()
-_session_up   = False
-
-
-def _ensure_session(player=None) -> None:
-    global _session_up
-    with _session_lock:
-        if not _session_up or not _session.is_ready():
-            # Reset and start fresh if session died
-            _session_up = False
-            _session.start(player=player)
-            _session_up = True
-        elif player is not None:
-            _session._player = player
-
-
-def screen_process(
-    parameters:     dict,
-    response=None,
-    player=None,
-    session_memory=None,
-    speak=None,
-) -> str:
-    global _last_capture_time
-    preview_active = False
-
-    def _deliver(message: str, *, error: bool = False) -> str:
-        """Route the vision result to speech, with the log as a fallback."""
-        spoken = False
-        if callable(speak):
-            try:
-                spoken = bool(speak(message))
-            except Exception as exc:
-                print(f"[Vision] ⚠️  Speech handoff failed: {exc}")
-        if player and not spoken:
-            try:
-                prefix = "ERR" if error else "Jarvis"
-                player.write_log(f"{prefix}: {message}")
-            except Exception:
-                pass
-        if preview_active and player and hasattr(player, "hide_vision_preview"):
-            try:
-                # Keep the live feed visible while the spoken result is likely
-                # still playing, then release its camera/screen resources.
-                hold_ms = 2400 if error else max(2200, min(10_000, len(message) * 55))
-                player.hide_vision_preview(hold_ms)
-            except Exception:
-                pass
-        return message
-
-    params    = parameters or {}
-    user_text = (params.get("text") or params.get("user_text") or "").strip()
-    angle     = params.get("angle", "screen").lower().strip()
-
-    if not user_text:
-        print("[Vision] ⚠️  No question provided — aborting")
-        return _deliver("No vision question was provided.", error=True)
-
-    print(f"[Vision] ▶ angle={angle!r}  question='{user_text[:80]}'")
-
-    # Cooldown to prevent excessive captures
-    now = time.time()
-    if now - _last_capture_time < _MIN_CAPTURE_INTERVAL:
-        print(f"[Vision] ⚠️  Capture too frequent — skipping")
-        return _deliver("Screen capture skipped because requests are too frequent.", error=True)
-
-    try:
-        if angle == "camera":
-            image_bytes, mime_type = _capture_camera()
-            print(f"[Vision] 📷 Camera: {len(image_bytes):,} bytes")
-        else:
-            image_bytes, mime_type = _capture_screen()
-            print(f"[Vision] 🖥️  Screen: {len(image_bytes):,} bytes")
-        _last_capture_time = now
-    except Exception as e:
-        print(f"[Vision] ❌ Capture error: {e}")
-        return _deliver(f"Screen capture failed: {e}", error=True)
-
-    if player and hasattr(player, "show_vision_preview"):
-        try:
-            player.show_vision_preview(angle)
-            preview_active = True
-        except Exception as exc:
-            print(f"[Vision] ⚠️  Live preview unavailable: {exc}")
-
-    try:
-        result = _direct_vision_answer(image_bytes, mime_type, user_text)
-    except Exception as e:
-        print(f"[Vision] ❌ Analysis error: {e}")
-        return _deliver(f"Screen analysis failed: {e}", error=True)
-
-    print(f"[Vision] 💬 {result}")
-    return _deliver(result)
-
-
-def warmup_session(player=None) -> None:
-    try:
-        _ensure_session(player=player)
-    except Exception as e:
-        print(f"[Vision] ⚠️  Warmup failed: {e}")
-
-if __name__ == "__main__":
-    print("[TEST] screen_processor.py")
-    print("=" * 52)
-    mode = input("angle — screen / camera (default: screen): ").strip().lower() or "screen"
-    q    = input("Question (Enter = default): ").strip() or "What do you see? Be brief."
-
-    t0 = time.perf_counter()
-    warmup_session()
-    print(f"Session ready in {time.perf_counter()-t0:.2f}s\n")
-
-    t1 = time.perf_counter()
-    ok = screen_process({"angle": mode, "text": q})
-    print(f"Queued in {time.perf_counter()-t1:.3f}s — waiting for audio...")
-    time.sleep(10)
-    print("Done." if ok else "Failed.")

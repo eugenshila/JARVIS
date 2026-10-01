@@ -1,93 +1,50 @@
-# --- Python ---
+# ── MARK LV — what never belongs in the repository ──────────────────────────
+# Everything listed here is created by the app on first run. A fresh clone with
+# none of it present boots straight to the setup screen, which is the intended
+# first experience — so nothing here needs to be committed, and some of it must
+# never be.
+
+# ── Secrets. Committing any of these publishes them. ──────────────────────────
+config/api_keys.json          # your Gemini API key, plus per-plugin credentials
+config/certs/                 # the dashboard's TLS private key and certificate
+config/whatsapp_web/          # a LINKED WhatsApp session — committing it hands
+                              # somebody your WhatsApp account, not just a key
+**/token*.json                # Google OAuth tokens (Gmail / Calendar plugins)
+**/client_secret*.json        # Google OAuth client secrets
+*credentials*.json
+.env
+.env.*
+
+# ── Personal data the assistant accumulates about you ─────────────────────────
+memory/long_term.json
+memory/*.db
+
+# ── Python build noise ────────────────────────────────────────────────────────
 __pycache__/
-.qa-artifacts/
 *.py[cod]
 *$py.class
-*.pyo
-*.pyd
-
-# Virtual environments
-.venv/
-venv/
-ENV/
-
-# Packaging
+*.so
 build/
 dist/
 *.egg-info/
-*.egg
+.eggs/
 
-# Bytecode / cache
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
 
-# Type check
-.mypy_cache/
-.dmypy.json
-
-# Lint
-.ruff_cache/
-
-# --- Environment / secrets ---
-.env
-.env.*
-!.env.example
-
-# If your app uses this JSON for local config/secrets
-config/api_keys.json
-config/ui_settings.json
-config/layout_settings.json
-config/.intro_voice_cache/
-config/gmail_credentials.json
-config/credentials.json
-credentials.json
-client_secret_*.json
-token.json
-
-# Local memory and task history
-memory/long_term.json
-memory/task_history.json
-
-# OS / editor
-.DS_Store
-.idea/
+# ── Editors and operating systems ─────────────────────────────────────────────
 .vscode/
-*.suo
-*.user
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Runtime output ────────────────────────────────────────────────────────────
 *.log
-
-# Local runtime artifacts
-*.db
-*.sqlite
-
-# Playwright
-playwright/.cache/
-
-# Hosted web build artifacts
-web/node_modules/
-web/.next/
-web/tsconfig.tsbuildinfo
-
-# If you generate local status/log files
-jarvis.log
-status.json
-
-
-tmp/
-outputs/
-.blackboxcli/
-.sixth/
-*.blackboxcli/
-*.sixth/
-
-# Local backup snapshots / experiments
-*.before_*
-*.broken_*
-*.before_remove
-*.before_remove_*
-*.codex_ui_control_working
-*.codex_*_working
-tutorial_overlay.py.before_remove
-*.before_tutorial_overlay
+logs/
+downloads/
+screenshots/
