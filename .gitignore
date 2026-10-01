@@ -48,3 +48,10 @@ desktop.ini
 logs/
 downloads/
 screenshots/
+
+# Morning-routine plugin artifacts (generated per run, never source)
+memory/morning_report_*.md
+memory/jautomatic_pending_queue.json
+memory/jautomatic_snapshot.json
+memory/shilatech_snapshot.json
+memory/.morning_routine_last_run
