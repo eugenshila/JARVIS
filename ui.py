@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import textwrap
 from pathlib import Path
 
 import psutil
@@ -111,13 +112,78 @@ def get_graphics_quality() -> str:
         return "medium"
 
 
-def set_graphics_quality(quality: str) -> str:
-    value = _normalize_graphics_quality(quality)
+def _update_ui_settings(**changes) -> dict:
+    """Merge user-interface preferences without dropping unrelated settings."""
     settings = _read_ui_settings()
-    settings["graphics_quality"] = value
+    settings.update(changes)
     UI_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     UI_SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    return settings
+
+
+def set_graphics_quality(quality: str) -> str:
+    value = _normalize_graphics_quality(quality)
+    _update_ui_settings(graphics_quality=value)
     return value
+
+
+FOCUS_SUPPORT_DEFAULTS = {
+    "enabled": True,
+    "setup_completed": False,
+    "reduced_choices": True,
+    "max_choices": 3,
+    "continuity_notes": True,
+    "gentle_checkins": True,
+    "checkin_minutes": 20,
+    "focus_minutes": 25,
+    "reduced_motion": True,
+    "quiet_mode": False,
+}
+
+
+def get_focus_support_settings() -> dict:
+    """Return validated, backward-compatible cognitive-support preferences."""
+    stored = _read_ui_settings().get("focus_support")
+    values = dict(FOCUS_SUPPORT_DEFAULTS)
+    if isinstance(stored, dict):
+        values.update(stored)
+    values["enabled"] = bool(values.get("enabled", True))
+    values["setup_completed"] = bool(values.get("setup_completed", False))
+    values["reduced_choices"] = bool(values.get("reduced_choices", True))
+    values["continuity_notes"] = bool(values.get("continuity_notes", True))
+    values["gentle_checkins"] = bool(values.get("gentle_checkins", True))
+    values["reduced_motion"] = bool(values.get("reduced_motion", True))
+    values["quiet_mode"] = bool(values.get("quiet_mode", False))
+
+    def _bounded_int(key: str, default: int, minimum: int, maximum: int) -> int:
+        try:
+            parsed = int(values.get(key, default))
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
+
+    values["max_choices"] = _bounded_int("max_choices", 3, 2, 3)
+    values["focus_minutes"] = _bounded_int("focus_minutes", 25, 5, 90)
+    values["checkin_minutes"] = _bounded_int("checkin_minutes", 20, 0, 60)
+    return values
+
+
+def set_focus_support_settings(values: dict) -> dict:
+    merged = get_focus_support_settings()
+    if isinstance(values, dict):
+        merged.update(values)
+    # Re-run validation through the reader's constraints before persisting.
+    settings = _read_ui_settings()
+    settings["focus_support"] = merged
+    UI_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    UI_SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    normalized = get_focus_support_settings()
+    if normalized != merged:
+        settings["focus_support"] = normalized
+        UI_SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    return normalized
+
+
 VOICE_OPTIONS = [
     ("Puck",          "puck"),
     ("Charon",        "charon"),
@@ -374,6 +440,23 @@ class ThemeManager:
             "PURPLE_D": "#7e4aa0", "GREEN_D": "#228b4b", "GREEN_GLO": "#4ade8010",
             "RED_D": "#a72c2c",
         },
+        "calm_mint": {
+            "name": "Calm Mint",
+            "BG": "#0b1110", "PANEL": "#0d1613", "PANEL2": "#111d19",
+            "DARK": "#08100d", "DARK2": "#14241f", "BAR_BG": "#0c1713",
+            "CARD": "#101a17", "CARD_B": "#14231e",
+            "BORDER": "#283a35", "BORDER_B": "#4f806f", "BORDER_A": "#365b4e",
+            "STEEL": "#22342e", "WHITE": "#eef8f5", "WHITE_DIM": "#a9c0b9",
+            "PRI": "#7ff0c2", "PRI_DIM": "#3c9e78", "PRI_GHO": "#153027",
+            "PRI_GLOW": "#7ff0c214", "ENERGY": "#9af7d2", "ENERGY_D": "#4ab68b",
+            "ACC": "#e4b86a", "ACC2": "#f0ca82", "PURPLE": "#b6a8ff",
+            "GREEN": "#7ff0c2", "RED": "#ff7185", "TEXT": "#cce9df",
+            "TEXT_DIM": "#58736a", "TEXT_MED": "#8eb0a5",
+            "RED_BG": "#29131a", "GREEN_BG": "#10251d", "PURPLE_BG": "#1c192b",
+            "MUTED_C": "#ff9aaa", "HOLOGRAM": "#7ff0c208",
+            "AMBER": "#e4b86a", "AMBER_D": "#9b7638", "PURPLE_D": "#7668bd",
+            "GREEN_D": "#3c9e78", "GREEN_GLO": "#7ff0c212", "RED_D": "#a93f52",
+        },
         "platinum": {
             "name": "Platinum White",
             "BG": "#e9edf2", "PANEL": "#f4f6f8", "PANEL2": "#eef1f5",
@@ -393,7 +476,7 @@ class ThemeManager:
         },
     }
 
-    _current = "arc_reactor"
+    _current = "calm_mint"
     _listeners: list = []
 
     @classmethod
@@ -4324,6 +4407,809 @@ class MissionControlPanel(QWidget):
         lay.addStretch()
 
 
+class MissionFlowColumn(QFrame):
+    """A clear Now / Next / Later lane with keyboard-selectable mission cards."""
+
+    mission_selected = pyqtSignal(object)
+
+    def __init__(self, key: str, title: str, accent_role: str = "PRI", parent=None):
+        super().__init__(parent)
+        self.key = key
+        self.title = title
+        self.accent_role = accent_role
+        self._items: list[dict] = []
+        self._buttons: list[QPushButton] = []
+        self.setObjectName(f"missionFlowColumn_{key}")
+        self.setAccessibleName(f"{title} missions")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        header = QHBoxLayout()
+        self._title = QLabel(title.upper())
+        self._title.setFont(QFont(TECH_FONT, 8, QFont.Weight.DemiBold))
+        header.addWidget(self._title)
+        header.addStretch()
+        self._count = QLabel("0")
+        self._count.setFont(QFont(TECH_FONT, 8, QFont.Weight.Medium))
+        header.addWidget(self._count)
+        layout.addLayout(header)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._container = QWidget()
+        self._cards = QVBoxLayout(self._container)
+        self._cards.setContentsMargins(0, 0, 0, 0)
+        self._cards.setSpacing(7)
+        self._cards.addStretch(1)
+        self._scroll.setWidget(self._container)
+        layout.addWidget(self._scroll, stretch=1)
+
+        self._empty = QLabel("Nothing here yet.")
+        self._empty.setWordWrap(True)
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty.setFont(QFont(UI_FONT, 9))
+        self._cards.insertWidget(0, self._empty)
+        self.refresh_theme()
+
+    def set_items(self, items: list[dict]):
+        self._items = [dict(item) for item in items]
+        while self._cards.count() > 1:
+            item = self._cards.takeAt(0)
+            if item and item.widget():
+                item.widget().hide()
+                item.widget().deleteLater()
+        self._buttons = []
+        self._empty = QLabel("Nothing here yet.")
+        self._empty.setWordWrap(True)
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty.setFont(QFont(UI_FONT, 9))
+        self._cards.insertWidget(0, self._empty)
+        self._empty.setVisible(not self._items)
+
+        for item in self._items:
+            button = QPushButton()
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setAccessibleName(f"{self.title} mission: {item.get('title', 'Untitled')}")
+            button.setToolTip("Select this mission to see its next actions")
+            button.setMinimumHeight(82)
+            title = str(item.get("title") or "Untitled mission")
+            wrapped_title = "\n".join(textwrap.wrap(title, width=23, max_lines=2, placeholder="…"))
+            button.setText(
+                f"{wrapped_title}\n"
+                f"{item.get('source', 'JARVIS')}  ·  {item.get('status', 'Ready')}"
+            )
+            button.clicked.connect(lambda _checked=False, value=dict(item): self.mission_selected.emit(value))
+            self._cards.insertWidget(self._cards.count() - 1, button)
+            self._buttons.append(button)
+        self._count.setText(str(len(self._items)))
+        self.refresh_theme()
+
+    def select(self, mission_id: str):
+        for button, item in zip(self._buttons, self._items):
+            button.setChecked(str(item.get("id")) == str(mission_id))
+        self.refresh_theme()
+
+    def refresh_theme(self):
+        accent = getattr(C, self.accent_role, C.PRI)
+        self.setStyleSheet(f"""
+            QFrame#missionFlowColumn_{self.key} {{
+                background: {C.DARK}; border: 1px solid {C.BORDER};
+                border-top: 2px solid {accent}; border-radius: 6px;
+            }}
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{ background: transparent; width: 5px; }}
+            QScrollBar::handle:vertical {{ background: {C.BORDER_B}; border-radius: 2px; }}
+        """)
+        self._container.setStyleSheet("background: transparent;")
+        self._title.setStyleSheet(f"color: {accent}; background: transparent; letter-spacing: 1px;")
+        self._count.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+        self._empty.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; padding: 18px;")
+        for button in self._buttons:
+            checked = button.isChecked()
+            button.setStyleSheet(f"""
+                QPushButton {{
+                    background: {C.CARD_B if checked else C.CARD};
+                    color: {C.WHITE if checked else C.WHITE_DIM};
+                    border: 1px solid {accent if checked else C.BORDER};
+                    border-left: 3px solid {accent}; border-radius: 5px;
+                    text-align: left; padding: 9px 10px; font-size: 12px;
+                }}
+                QPushButton:hover, QPushButton:focus {{
+                    background: {C.PANEL2}; color: {C.WHITE}; border-color: {C.BORDER_B};
+                }}
+            """)
+
+
+class HybridMissionBoard(QWidget):
+    """Mission-first workspace with continuity and optional cognitive supports."""
+
+    command_submitted = pyqtSignal(str)
+    focus_view_requested = pyqtSignal()
+    support_settings_requested = pyqtSignal()
+
+    def __init__(self, parent=None, support_settings: dict | None = None):
+        super().__init__(parent)
+        self.setObjectName("HybridMissionBoard")
+        self.setAccessibleName("JARVIS Mission Board")
+        self._support = dict(support_settings or get_focus_support_settings())
+        self._selected: dict | None = None
+        self._jarvis_state = "LISTENING"
+        self._timer_running = False
+        self._last_board_state: dict | None = None
+        self._confirming_complete = False
+        self._pre_tool_mission_id = ""
+        self._timer_seconds = int(self._support.get("focus_minutes", 25)) * 60
+        self._missions = {"now": [], "next": [], "later": []}
+        self._parking_lot: list[str] = []
+        self._continuity = "Choose a mission or tell JARVIS what you want to accomplish."
+        self._load_state()
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 14, 16, 14)
+        root.setSpacing(10)
+
+        # Persistent interruption-recovery strip.
+        self._continuity_frame = QFrame()
+        self._continuity_frame.setObjectName("ContinuityStrip")
+        continuity_layout = QHBoxLayout(self._continuity_frame)
+        continuity_layout.setContentsMargins(12, 7, 10, 7)
+        continuity_layout.setSpacing(10)
+        marker = QLabel("RESUME POINT")
+        marker.setFont(QFont(TECH_FONT, 7, QFont.Weight.DemiBold))
+        marker.setStyleSheet(f"color: {C.ACC}; background: transparent; letter-spacing: 1px;")
+        continuity_layout.addWidget(marker)
+        self._continuity_label = QLabel(self._continuity)
+        self._continuity_label.setFont(QFont(UI_FONT, 9, QFont.Weight.Medium))
+        self._continuity_label.setWordWrap(False)
+        continuity_layout.addWidget(self._continuity_label, stretch=1)
+        self._resume_button = QPushButton("CONTINUE")
+        self._resume_button.setAccessibleName("Continue the last mission")
+        self._resume_button.clicked.connect(self._continue_selected)
+        continuity_layout.addWidget(self._resume_button)
+        root.addWidget(self._continuity_frame)
+
+        header = QHBoxLayout()
+        title_box = QVBoxLayout()
+        self._title = QLabel("TODAY'S FLOW")
+        self._title.setFont(QFont(UI_FONT, 17, QFont.Weight.DemiBold))
+        title_box.addWidget(self._title)
+        self._subtitle = QLabel("One active mission. The rest stay visible without competing for attention.")
+        self._subtitle.setFont(QFont(UI_FONT, 9))
+        title_box.addWidget(self._subtitle)
+        header.addLayout(title_box)
+        header.addStretch()
+        self._state_label = QLabel("●  LISTENING")
+        self._state_label.setFont(QFont(TECH_FONT, 8, QFont.Weight.Medium))
+        header.addWidget(self._state_label)
+        self._quiet_button = QPushButton("LOW STIMULATION")
+        self._quiet_button.setCheckable(True)
+        self._quiet_button.setChecked(bool(self._support.get("quiet_mode")))
+        self._quiet_button.setAccessibleName("Toggle low stimulation mode")
+        self._quiet_button.clicked.connect(self._toggle_quiet_mode)
+        header.addWidget(self._quiet_button)
+        self._focus_button = QPushButton("FOCUS VIEW")
+        self._focus_button.setAccessibleName("Open one-task focus view")
+        self._focus_button.clicked.connect(self.focus_view_requested)
+        header.addWidget(self._focus_button)
+        root.addLayout(header)
+
+        body = QHBoxLayout()
+        body.setSpacing(10)
+        columns_wrap = QWidget()
+        columns_layout = QHBoxLayout(columns_wrap)
+        columns_layout.setContentsMargins(0, 0, 0, 0)
+        columns_layout.setSpacing(8)
+        self._columns = {
+            "now": MissionFlowColumn("now", "Now", "PRI"),
+            "next": MissionFlowColumn("next", "Next", "PURPLE"),
+            "later": MissionFlowColumn("later", "Later", "TEXT_MED"),
+        }
+        for key, column in self._columns.items():
+            column.mission_selected.connect(self._select_mission)
+            columns_layout.addWidget(column, stretch=1)
+        body.addWidget(columns_wrap, stretch=1)
+
+        self._inspector = QFrame()
+        self._inspector.setObjectName("MissionInspector")
+        self._inspector.setMinimumWidth(252)
+        self._inspector.setMinimumHeight(520)
+        inspector_layout = QVBoxLayout(self._inspector)
+        inspector_layout.setContentsMargins(10, 10, 10, 10)
+        inspector_layout.setSpacing(4)
+        inspector_tag = QLabel("SELECTED MISSION")
+        inspector_tag.setFont(QFont(TECH_FONT, 7, QFont.Weight.DemiBold))
+        inspector_tag.setStyleSheet(f"color: {C.PRI}; background: transparent; letter-spacing: 1px;")
+        inspector_layout.addWidget(inspector_tag)
+        self._selected_title = QLabel("Nothing selected")
+        self._selected_title.setWordWrap(True)
+        self._selected_title.setMinimumHeight(44)
+        self._selected_title.setFont(QFont(UI_FONT, 13, QFont.Weight.DemiBold))
+        inspector_layout.addWidget(self._selected_title)
+        self._selected_meta = QLabel("Select a card to reveal only the relevant actions.")
+        self._selected_meta.setWordWrap(True)
+        self._selected_meta.setMinimumHeight(54)
+        self._selected_meta.setFont(QFont(UI_FONT, 8))
+        inspector_layout.addWidget(self._selected_meta)
+
+        self._continue_action = QPushButton("CONTINUE WITH JARVIS")
+        self._continue_action.clicked.connect(self._continue_selected)
+        self._breakdown_action = QPushButton("BREAK INTO SMALL STEPS")
+        self._breakdown_action.clicked.connect(self._break_down_selected)
+        self._complete_action = QPushButton("MARK COMPLETE")
+        self._complete_action.clicked.connect(self._complete_selected)
+        for button in (self._continue_action, self._breakdown_action, self._complete_action):
+            button.setMinimumHeight(31)
+            button.setAccessibleName(button.text().title())
+            inspector_layout.addWidget(button)
+
+        self._action_preview = QLabel("Safety state: ready. Actions can be deferred or undone.")
+        self._action_preview.setWordWrap(True)
+        self._action_preview.setMinimumHeight(40)
+        self._action_preview.setFont(QFont(UI_FONT, 8))
+        inspector_layout.addWidget(self._action_preview)
+        safety_row = QHBoxLayout()
+        safety_row.setSpacing(5)
+        self._skip_action = QPushButton("SKIP")
+        self._skip_action.setToolTip("Leave this mission in place and select another")
+        self._skip_action.clicked.connect(self._skip_selected)
+        safety_row.addWidget(self._skip_action)
+        self._defer_action = QPushButton("LATER")
+        self._defer_action.setToolTip("Come back later")
+        self._defer_action.clicked.connect(self._defer_selected)
+        safety_row.addWidget(self._defer_action)
+        self._undo_action = QPushButton("UNDO")
+        self._undo_action.setToolTip("Undo the last Mission Board change")
+        self._undo_action.clicked.connect(self._undo_last_change)
+        safety_row.addWidget(self._undo_action)
+        inspector_layout.addLayout(safety_row)
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        inspector_layout.addWidget(divider)
+        focus_title = QLabel("QUIET CO-FOCUS")
+        focus_title.setFont(QFont(TECH_FONT, 7, QFont.Weight.DemiBold))
+        inspector_layout.addWidget(focus_title)
+        self._timer_label = QLabel(self._format_timer())
+        self._timer_label.setFont(QFont(TECH_FONT, 24, QFont.Weight.Medium))
+        inspector_layout.addWidget(self._timer_label)
+        timer_row = QHBoxLayout()
+        self._timer_button = QPushButton("START")
+        self._timer_button.clicked.connect(self._toggle_timer)
+        timer_row.addWidget(self._timer_button)
+        self._timer_reset = QPushButton("RESET")
+        self._timer_reset.clicked.connect(self._reset_timer)
+        timer_row.addWidget(self._timer_reset)
+        inspector_layout.addLayout(timer_row)
+        self._stuck_button = QPushButton("I'M STUCK")
+        self._stuck_button.setAccessibleName("Ask JARVIS for a smaller first step")
+        self._stuck_button.clicked.connect(self._request_unstick)
+        inspector_layout.addWidget(self._stuck_button)
+        inspector_layout.addStretch()
+        self._support_button = QPushButton("FOCUS SUPPORT SETTINGS")
+        self._support_button.clicked.connect(self.support_settings_requested)
+        inspector_layout.addWidget(self._support_button)
+
+        self._inspector_scroll = QScrollArea()
+        self._inspector_scroll.setObjectName("MissionInspectorScroll")
+        self._inspector_scroll.setWidgetResizable(True)
+        self._inspector_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._inspector_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._inspector_scroll.setFixedWidth(268)
+        self._inspector_scroll.setWidget(self._inspector)
+        body.addWidget(self._inspector_scroll)
+        root.addLayout(body, stretch=1)
+
+        capture_row = QHBoxLayout()
+        self._capture_input = QLineEdit()
+        self._capture_input.setPlaceholderText("Capture a task or distracting thought without losing your place…")
+        self._capture_input.setAccessibleName("Quick capture")
+        self._capture_input.returnPressed.connect(self._capture_next)
+        capture_row.addWidget(self._capture_input, stretch=1)
+        self._capture_task_button = QPushButton("ADD TO NEXT")
+        self._capture_task_button.clicked.connect(self._capture_next)
+        capture_row.addWidget(self._capture_task_button)
+        self._capture_park_button = QPushButton("PARK THOUGHT")
+        self._capture_park_button.clicked.connect(self._capture_parking)
+        capture_row.addWidget(self._capture_park_button)
+        self._parking_count = QPushButton("")
+        self._parking_count.setFont(QFont(TECH_FONT, 8))
+        self._parking_count.setAccessibleName("View parked thoughts")
+        self._parking_count.clicked.connect(self._show_parking_lot)
+        capture_row.addWidget(self._parking_count)
+        root.addLayout(capture_row)
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000)
+        self._timer.timeout.connect(self._timer_tick)
+        self._checkin_timer = QTimer(self)
+        self._checkin_timer.timeout.connect(self._neutral_checkin)
+        self.apply_preferences(self._support)
+        self._rebuild()
+        self.refresh_theme()
+
+    def _load_state(self):
+        state = _read_ui_settings().get("mission_board")
+        if not isinstance(state, dict):
+            return
+        lanes = state.get("missions")
+        if isinstance(lanes, dict):
+            for lane in self._missions:
+                values = lanes.get(lane)
+                if isinstance(values, list):
+                    self._missions[lane] = [dict(item) for item in values if isinstance(item, dict)][:20]
+        parking = state.get("parking_lot")
+        if isinstance(parking, list):
+            self._parking_lot = [str(item) for item in parking if str(item).strip()][:30]
+        continuity = str(state.get("continuity") or "").strip()
+        if continuity:
+            self._continuity = continuity
+        selected_id = str(state.get("selected_id") or "")
+        for missions in self._missions.values():
+            for mission in missions:
+                if str(mission.get("id", "")) == selected_id:
+                    self._selected = mission
+                    break
+            if self._selected:
+                break
+        if self._selected is None and self._missions["now"]:
+            self._selected = self._missions["now"][0]
+
+    def _save_state(self):
+        _update_ui_settings(mission_board={
+            "missions": self._missions,
+            "parking_lot": self._parking_lot,
+            "continuity": self._continuity,
+            "selected_id": str((self._selected or {}).get("id", "")),
+        })
+
+    @staticmethod
+    def _mission_id(title: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:48] or str(int(time.time()))
+
+    def _record_undo(self):
+        self._last_board_state = {
+            "missions": json.loads(json.dumps(self._missions)),
+            "parking_lot": list(self._parking_lot),
+            "continuity": self._continuity,
+            "selected_id": str((self._selected or {}).get("id", "")),
+        }
+
+    def _undo_last_change(self):
+        snapshot = self._last_board_state
+        if not snapshot:
+            self._action_preview.setText("Nothing to undo. Your current board is unchanged.")
+            return
+        self._missions = json.loads(json.dumps(snapshot["missions"]))
+        self._parking_lot = list(snapshot["parking_lot"])
+        self._continuity = str(snapshot["continuity"])
+        selected = self._find_mission(str(snapshot.get("selected_id", "")))
+        self._selected = selected[1] if selected else None
+        self._last_board_state = None
+        self._action_preview.setText("Undone. No external action was started.")
+        self._save_state()
+        self._rebuild()
+
+    def add_mission(self, title: str, lane: str = "next", source: str = "Captured",
+                    status: str = "Ready", record_undo: bool = True) -> dict | None:
+        clean = " ".join(str(title or "").split()).strip()
+        if not clean:
+            return None
+        if record_undo:
+            self._record_undo()
+        lane = lane if lane in self._missions else "next"
+        mission_id = self._mission_id(clean)
+        existing = self._find_mission(mission_id)
+        if existing:
+            existing[1]["status"] = status
+            if existing[0] != lane:
+                self._missions[existing[0]].remove(existing[1])
+                self._missions[lane].insert(0, existing[1])
+            mission = existing[1]
+        else:
+            mission = {"id": mission_id, "title": clean, "source": source, "status": status}
+            self._missions[lane].insert(0, mission)
+        if lane == "now":
+            # The board deliberately permits one primary active mission.
+            for other in list(self._missions["now"])[1:]:
+                self._missions["now"].remove(other)
+                other["status"] = "Ready"
+                self._missions["next"].insert(0, other)
+        self._continuity = f"Current context: {clean}"
+        self._selected = mission
+        self._save_state()
+        self._rebuild()
+        return mission
+
+    def ingest_task(self, title: str, status: str):
+        tool_id = self._mission_id(title)
+        if status in {"active", "calling"} and self._missions["now"]:
+            current_id = str(self._missions["now"][0].get("id", ""))
+            if current_id != tool_id:
+                self._pre_tool_mission_id = current_id
+        mapped_lane = "now" if status in {"active", "calling"} else "later" if status in {"done", "error"} else "next"
+        mapped_status = {
+            "active": "In progress", "calling": "JARVIS working",
+            "done": "Completed", "error": "Needs attention", "pending": "Ready",
+        }.get(status, status.title())
+        self.add_mission(title, mapped_lane, "JARVIS tool", mapped_status, record_undo=False)
+        if status in {"active", "calling"}:
+            self._action_preview.setText(
+                f"In progress: {title}. The board will keep this context if you switch views."
+            )
+        elif status in {"done", "error"}:
+            previous = self._find_mission(self._pre_tool_mission_id)
+            if previous and previous[0] != "now":
+                self._missions[previous[0]].remove(previous[1])
+                previous[1]["status"] = "Active"
+                self._missions["now"].insert(0, previous[1])
+                self._selected = previous[1]
+                self._continuity = f"Resume: {previous[1].get('title', 'previous mission')}"
+                self._pre_tool_mission_id = ""
+                self._save_state()
+                self._rebuild()
+            if status == "done":
+                self._action_preview.setText(f"Confirmed complete: {title}. Previous context restored.")
+            else:
+                self._action_preview.setText(
+                    f"Needs attention: {title}. Nothing else was started; previous context restored."
+                )
+
+    def note_user_command(self, text: str):
+        clean = " ".join(str(text or "").split())
+        if not clean or not self._support.get("continuity_notes", True):
+            return
+        self._continuity = f"Last request: {clean[:110]}"
+        self._continuity_label.setText(self._continuity)
+        self._save_state()
+
+    def set_jarvis_state(self, state: str):
+        self._jarvis_state = str(state or "LISTENING").upper()
+        self._state_label.setText(f"●  {self._jarvis_state}")
+        if self._jarvis_state in {"THINKING", "PROCESSING"}:
+            self._action_preview.setText(
+                "Safety state: JARVIS is working. Consequential actions still require confirmation."
+            )
+        elif self._jarvis_state == "MUTED":
+            self._action_preview.setText("Safety state: microphone paused. Text controls remain available.")
+        elif self._jarvis_state == "LISTENING" and not self._confirming_complete:
+            self._action_preview.setText("Safety state: ready. Skip, Later, and Undo remain available.")
+        self.refresh_theme()
+
+    def apply_preferences(self, values: dict):
+        self._support = dict(values or get_focus_support_settings())
+        enabled = bool(self._support.get("enabled", True))
+        self._quiet_button.setChecked(bool(self._support.get("quiet_mode")))
+        if not self._timer_running:
+            self._timer_seconds = int(self._support.get("focus_minutes", 25)) * 60
+            self._timer_label.setText(self._format_timer())
+        self._continuity_frame.setVisible(
+            enabled and bool(self._support.get("continuity_notes", True))
+        )
+        primary = (self._continue_action, self._breakdown_action, self._complete_action)
+        visible_limit = 3
+        if enabled and self._support.get("reduced_choices", True):
+            visible_limit = max(2, min(3, int(self._support.get("max_choices", 3))))
+        for index, button in enumerate(primary):
+            button.setVisible(index < visible_limit)
+        self._checkin_timer.stop()
+        if enabled and self._support.get("gentle_checkins", True):
+            interval = max(5, int(self._support.get("checkin_minutes", 20))) * 60_000
+            self._checkin_timer.start(interval)
+        self.refresh_theme()
+
+    def _neutral_checkin(self):
+        self._action_preview.setText(
+            "Neutral check-in: continue, pause the timer, skip, or come back later. Any is okay."
+        )
+
+    def _find_mission(self, mission_id: str):
+        for lane, missions in self._missions.items():
+            for mission in missions:
+                if str(mission.get("id")) == str(mission_id):
+                    return lane, mission
+        return None
+
+    def _select_mission(self, mission: dict):
+        found = self._find_mission(str(mission.get("id")))
+        self._selected = found[1] if found else mission
+        self._confirming_complete = False
+        self._complete_action.setText("MARK COMPLETE")
+        self._action_preview.setText(
+            "Preview: JARVIS will state the next step before acting. You can skip or come back later."
+        )
+        self._inspector_scroll.verticalScrollBar().setValue(0)
+        self._rebuild()
+
+    def _rebuild(self):
+        selected_id = str((self._selected or {}).get("id", ""))
+        for lane, column in self._columns.items():
+            column.set_items(self._missions[lane])
+            column.select(selected_id)
+        selected = self._selected
+        if selected:
+            self._selected_title.setText(str(selected.get("title") or "Untitled mission"))
+            self._selected_meta.setText(
+                f"{selected.get('source', 'JARVIS')}  ·  {selected.get('status', 'Ready')}\n"
+                "Choose one action. Nothing consequential happens without your approval."
+            )
+        else:
+            self._selected_title.setText("Nothing selected")
+            self._selected_meta.setText("Select a card to reveal only the relevant actions.")
+        has_selection = bool(selected)
+        for button in (
+            self._continue_action, self._breakdown_action, self._complete_action,
+            self._stuck_button, self._skip_action, self._defer_action,
+        ):
+            button.setEnabled(has_selection)
+        self._undo_action.setEnabled(self._last_board_state is not None)
+        self._continuity_label.setText(self._continuity)
+        self._parking_count.setText(f"PARKED  {len(self._parking_lot)}")
+        self.refresh_theme()
+
+    def _continue_selected(self):
+        if not self._selected:
+            if self._missions["now"]:
+                self._select_mission(self._missions["now"][0])
+            return
+        found = self._find_mission(str(self._selected.get("id", "")))
+        if found and found[0] != "now":
+            self._record_undo()
+            self._missions[found[0]].remove(found[1])
+            for current in list(self._missions["now"]):
+                self._missions["now"].remove(current)
+                current["status"] = "Ready"
+                self._missions["next"].insert(0, current)
+            found[1]["status"] = "Active"
+            self._missions["now"].insert(0, found[1])
+            self._selected = found[1]
+        title = str(self._selected.get("title") or "this mission")
+        self._continuity = f"Working now: {title}. Next action will be previewed before it starts."
+        self._action_preview.setText("Preview sent. JARVIS will describe one next action before doing it.")
+        self._save_state()
+        self._rebuild()
+        self.command_submitted.emit(
+            f"Continue with this mission: {title}. Tell me the single next action before doing it. "
+            "Wait for confirmation before any consequential action."
+        )
+
+    def _break_down_selected(self):
+        if self._selected:
+            title = str(self._selected.get("title") or "this mission")
+            self.command_submitted.emit(
+                f"Break this mission into at most three small, concrete steps and help me start only step one: {title}"
+            )
+
+    def _request_unstick(self):
+        title = str((self._selected or {}).get("title") or "my current task")
+        self._action_preview.setText("Preview: JARVIS will offer one two-minute step, not a full plan.")
+        self.command_submitted.emit(
+            f"I am stuck on {title}. Reduce the starting effort and give me one two-minute next step."
+        )
+
+    def _skip_selected(self):
+        if not self._selected:
+            return
+        current_id = str(self._selected.get("id", ""))
+        choices = [
+            mission for lane in ("now", "next", "later")
+            for mission in self._missions[lane]
+            if str(mission.get("id", "")) != current_id and mission.get("status") != "Completed"
+        ]
+        title = str(self._selected.get("title") or "mission")
+        self._continuity = f"Skipped for now: {title}. It remains in place."
+        if choices:
+            self._selected = choices[0]
+        self._action_preview.setText("Skipped without changing the mission. Undo is not needed.")
+        self._save_state()
+        self._rebuild()
+
+    def _defer_selected(self):
+        if not self._selected:
+            return
+        found = self._find_mission(str(self._selected.get("id", "")))
+        if not found:
+            return
+        self._record_undo()
+        lane, mission = found
+        self._missions[lane].remove(mission)
+        mission["status"] = "Come back later"
+        self._missions["later"].insert(0, mission)
+        self._continuity = f"Set aside for later: {mission.get('title', 'mission')}. You can undo this."
+        self._selected = self._missions["now"][0] if self._missions["now"] else None
+        self._action_preview.setText("Moved to Later. No external action was started. Undo is available.")
+        self._save_state()
+        self._rebuild()
+
+    def _complete_selected(self):
+        if not self._selected:
+            return
+        if not self._confirming_complete:
+            self._confirming_complete = True
+            self._complete_action.setText("CONFIRM COMPLETE")
+            self._action_preview.setText(
+                "Preview: confirming moves this mission to Later as Completed. Undo will remain available."
+            )
+            return
+        found = self._find_mission(str(self._selected.get("id")))
+        if not found:
+            return
+        self._record_undo()
+        lane, mission = found
+        self._missions[lane].remove(mission)
+        mission["status"] = "Completed"
+        self._missions["later"].insert(0, mission)
+        self._continuity = f"Completed: {mission.get('title', 'mission')}. Choose the next mission when ready."
+        self._selected = self._missions["now"][0] if self._missions["now"] else None
+        self._confirming_complete = False
+        self._complete_action.setText("MARK COMPLETE")
+        self._action_preview.setText("Marked complete. Undo is available.")
+        self._save_state()
+        self._rebuild()
+
+    def _capture_next(self):
+        text = self._capture_input.text().strip()
+        if self.add_mission(text, "next", "Quick capture", "Ready"):
+            self._capture_input.clear()
+
+    def _capture_parking(self):
+        text = self._capture_input.text().strip()
+        if not text:
+            return
+        self._record_undo()
+        self._parking_lot.insert(0, text)
+        self._parking_lot = self._parking_lot[:30]
+        self._capture_input.clear()
+        self._save_state()
+        self._parking_count.setText(f"PARKED  {len(self._parking_lot)}")
+
+    def _show_parking_lot(self):
+        menu = QMenu(self)
+        menu.setAccessibleName("Parked thoughts")
+        if not self._parking_lot:
+            empty = menu.addAction("No thoughts parked")
+            empty.setEnabled(False)
+        else:
+            heading = menu.addAction("ADD A PARKED THOUGHT TO NEXT")
+            heading.setEnabled(False)
+            menu.addSeparator()
+            for index, thought in enumerate(self._parking_lot[:12]):
+                label = thought if len(thought) <= 52 else thought[:49] + "…"
+                action = menu.addAction(label)
+                action.setToolTip(f"Create a Next task from: {thought}")
+                action.triggered.connect(
+                    lambda _checked=False, i=index: self._promote_parked_thought(i)
+                )
+        menu.setStyleSheet(f"""
+            QMenu {{ background: {C.PANEL}; color: {C.WHITE_DIM}; border: 1px solid {C.BORDER_B}; }}
+            QMenu::item {{ padding: 7px 12px; }}
+            QMenu::item:selected {{ background: {C.PRI_GHO}; color: {C.PRI}; }}
+        """)
+        menu.exec(self._parking_count.mapToGlobal(self._parking_count.rect().bottomLeft()))
+
+    def _promote_parked_thought(self, index: int):
+        if index < 0 or index >= len(self._parking_lot):
+            return
+        self._record_undo()
+        thought = self._parking_lot.pop(index)
+        self.add_mission(thought, "next", "Parking lot", "Ready", record_undo=False)
+        self._continuity = f"Added from parking lot: {thought[:100]}"
+        self._save_state()
+        self._rebuild()
+
+    def _toggle_quiet_mode(self, checked: bool):
+        self._support["quiet_mode"] = bool(checked)
+        set_focus_support_settings(self._support)
+        self.refresh_theme()
+
+    def _format_timer(self) -> str:
+        minutes, seconds = divmod(max(0, self._timer_seconds), 60)
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def _toggle_timer(self):
+        self._timer_running = not self._timer_running
+        if self._timer_running:
+            self._timer.start()
+            self._timer_button.setText("PAUSE")
+            self._action_preview.setText("Quiet timer running. Pause remains available at any time.")
+        else:
+            self._timer.stop()
+            self._timer_button.setText("RESUME")
+            self._action_preview.setText("Timer paused. Your place and remaining time are preserved.")
+
+    def _reset_timer(self):
+        self._timer.stop()
+        self._timer_running = False
+        self._timer_seconds = int(self._support.get("focus_minutes", 25)) * 60
+        self._timer_label.setText(self._format_timer())
+        self._timer_button.setText("START")
+
+    def _timer_tick(self):
+        self._timer_seconds = max(0, self._timer_seconds - 1)
+        self._timer_label.setText(self._format_timer())
+        if self._timer_seconds == 0:
+            self._timer.stop()
+            self._timer_running = False
+            self._timer_button.setText("START AGAIN")
+            self._continuity = "Focus interval complete. Pause, continue, or choose another mission—no urgency."
+            self._continuity_label.setText(self._continuity)
+            self._action_preview.setText("Focus interval complete. There is no overdue state.")
+            self._save_state()
+
+    def refresh_theme(self):
+        quiet = bool(self._quiet_button.isChecked())
+        accent = C.GREEN if quiet else C.PRI
+        self.setStyleSheet(f"QWidget#HybridMissionBoard {{ background: {C.BG}; }}")
+        self._continuity_frame.setStyleSheet(f"""
+            QFrame#ContinuityStrip {{ background: {C.PANEL2}; border: 1px solid {C.BORDER}; border-radius: 5px; }}
+        """)
+        self._continuity_label.setStyleSheet(f"color: {C.WHITE_DIM}; background: transparent;")
+        self._title.setStyleSheet(f"color: {C.WHITE}; background: transparent;")
+        self._subtitle.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        state_color = C.GREEN if self._jarvis_state in {"LISTENING", "SPEAKING"} else C.ACC
+        self._state_label.setStyleSheet(f"color: {state_color}; background: transparent;")
+        self._inspector_scroll.setStyleSheet(f"""
+            QScrollArea#MissionInspectorScroll {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{ background: {C.DARK}; width: 5px; }}
+            QScrollBar::handle:vertical {{ background: {C.BORDER_B}; border-radius: 2px; min-height: 24px; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+        self._inspector.setStyleSheet(f"""
+            QFrame#MissionInspector {{ background: {C.PANEL}; border: 1px solid {C.BORDER}; border-radius: 6px; }}
+        """)
+        self._selected_title.setStyleSheet(f"color: {C.WHITE}; background: transparent;")
+        self._selected_meta.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        self._action_preview.setStyleSheet(
+            f"color: {C.TEXT_MED}; background: {C.PANEL2}; border: 1px solid {C.BORDER}; "
+            "border-radius: 4px; padding: 6px;"
+        )
+        self._timer_label.setStyleSheet(f"color: {accent}; background: transparent;")
+        self._parking_count.setStyleSheet(f"""
+            QPushButton {{ color: {C.TEXT_DIM}; background: transparent; border: none; padding: 5px; }}
+            QPushButton:hover, QPushButton:focus {{ color: {accent}; text-decoration: underline; }}
+        """)
+        for column in self._columns.values():
+            column.refresh_theme()
+        primary_buttons = (self._resume_button, self._focus_button, self._continue_action,
+                           self._capture_task_button, self._timer_button)
+        for button in primary_buttons:
+            button.setStyleSheet(f"""
+                QPushButton {{ background: {C.PRI_GHO}; color: {accent}; border: 1px solid {C.PRI_DIM};
+                               border-radius: 4px; padding: 7px 10px; }}
+                QPushButton:hover, QPushButton:focus {{ background: {C.CARD_B}; border-color: {accent}; }}
+                QPushButton:disabled {{ color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}
+            """)
+        for button in (
+            self._breakdown_action, self._complete_action, self._skip_action,
+            self._defer_action, self._undo_action, self._timer_reset,
+            self._support_button, self._capture_park_button, self._quiet_button,
+        ):
+            button.setStyleSheet(f"""
+                QPushButton {{ background: transparent; color: {C.WHITE_DIM}; border: 1px solid {C.BORDER};
+                               border-radius: 4px; padding: 7px 10px; }}
+                QPushButton:hover, QPushButton:focus, QPushButton:checked {{
+                    color: {accent}; border-color: {C.BORDER_B}; background: {C.PANEL2};
+                }}
+                QPushButton:disabled {{ color: {C.TEXT_DIM}; }}
+            """)
+        self._stuck_button.setStyleSheet(f"""
+            QPushButton {{ background: {C.RED_BG}; color: {C.MUTED_C}; border: 1px solid {C.RED_D};
+                           border-radius: 4px; padding: 7px 10px; }}
+            QPushButton:hover, QPushButton:focus {{ border-color: {C.RED}; }}
+            QPushButton:disabled {{ color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}
+        """)
+        self._capture_input.setStyleSheet(f"""
+            QLineEdit {{ background: {C.DARK}; color: {C.WHITE}; border: 1px solid {C.BORDER};
+                         border-radius: 4px; padding: 9px 11px; }}
+            QLineEdit:focus {{ border-color: {accent}; }}
+            QLineEdit::placeholder {{ color: {C.TEXT_DIM}; }}
+        """)
+
+
 class LogWidget(QTextEdit):
     _sig = pyqtSignal(str)
 
@@ -5129,10 +6015,11 @@ class SettingsOverlay(_OverlayBase):
     name_changed = pyqtSignal(str)
     theme_changed = pyqtSignal(str)
     graphics_changed = pyqtSignal(str)
+    focus_support_changed = pyqtSignal(object)
 
     def __init__(self, parent=None, current_name: str = "",
-                 current_voice: str = "puck", current_theme: str = "arc_reactor",
-                 current_graphics: str = "medium"):
+                 current_voice: str = "puck", current_theme: str = "calm_mint",
+                 current_graphics: str = "medium", focus_support: dict | None = None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"""
@@ -5147,6 +6034,7 @@ class SettingsOverlay(_OverlayBase):
         self._current_voice = current_voice
         self._current_theme = current_theme
         self._current_graphics = _normalize_graphics_quality(current_graphics)
+        self._focus_support = dict(focus_support or get_focus_support_settings())
         self._theme_labels: list[tuple[QLabel, str]] = []
 
         layout = QVBoxLayout(self)
@@ -5179,7 +6067,7 @@ class SettingsOverlay(_OverlayBase):
         tb_lay.setSpacing(4)
 
         self._s_tabs: list[QPushButton] = []
-        self._s_tab_names = ["IDENTITY", "THEME", "GRAPHICS"]
+        self._s_tab_names = ["IDENTITY", "THEME", "GRAPHICS", "SUPPORT"]
         self._s_active_tab = 0
 
         for i, name in enumerate(self._s_tab_names):
@@ -5311,10 +6199,69 @@ class SettingsOverlay(_OverlayBase):
         gfx_lay.addStretch()
         self._s_stack.addWidget(gfx_page)
 
+        # Page 3: Focus support. These controls are intentionally concrete and
+        # neutral: they change information density and continuity, not the user.
+        support_page = QWidget()
+        support_page.setStyleSheet("background: transparent;")
+        support_lay = QVBoxLayout(support_page)
+        support_lay.setContentsMargins(4, 8, 4, 4)
+        support_lay.setSpacing(8)
+        support_lay.addWidget(_lbl(
+            "FOCUS SUPPORT", 8, bold=True, color_role="WHITE_DIM",
+            align=Qt.AlignmentFlag.AlignLeft,
+        ))
+        support_lay.addWidget(_lbl(
+            "Adjust continuity, decision load, timers, and motion. No productivity scoring.",
+            8, color_role="WHITE_DIM", align=Qt.AlignmentFlag.AlignLeft,
+        ))
+
+        self._s_support_enabled = QCheckBox("Enable focus-support features")
+        self._s_support_enabled.setChecked(bool(self._focus_support.get("enabled", True)))
+        self._s_continuity = QCheckBox("Show a resume point after interruptions")
+        self._s_continuity.setChecked(bool(self._focus_support.get("continuity_notes", True)))
+        self._s_reduced_choices = QCheckBox("Limit visible decisions")
+        self._s_reduced_choices.setChecked(bool(self._focus_support.get("reduced_choices", True)))
+        self._s_reduced_motion = QCheckBox("Reduce nonessential motion")
+        self._s_reduced_motion.setChecked(bool(self._focus_support.get("reduced_motion", True)))
+        self._s_gentle_checkins = QCheckBox("Use neutral focus check-ins")
+        self._s_gentle_checkins.setChecked(bool(self._focus_support.get("gentle_checkins", True)))
+        for checkbox in (
+            self._s_support_enabled, self._s_continuity, self._s_reduced_choices,
+            self._s_reduced_motion, self._s_gentle_checkins,
+        ):
+            support_lay.addWidget(checkbox)
+
+        support_form = QFormLayout()
+        self._s_max_choices = QSpinBox()
+        self._s_max_choices.setRange(2, 3)
+        self._s_max_choices.setValue(int(self._focus_support.get("max_choices", 3)))
+        self._s_max_choices.setSuffix(" choices")
+        support_form.addRow("Maximum decisions", self._s_max_choices)
+        self._s_focus_minutes = QSpinBox()
+        self._s_focus_minutes.setRange(5, 90)
+        self._s_focus_minutes.setValue(int(self._focus_support.get("focus_minutes", 25)))
+        self._s_focus_minutes.setSuffix(" minutes")
+        support_form.addRow("Focus interval", self._s_focus_minutes)
+        self._s_checkin_minutes = QSpinBox()
+        self._s_checkin_minutes.setRange(0, 60)
+        self._s_checkin_minutes.setSpecialValueText("Off")
+        self._s_checkin_minutes.setValue(int(self._focus_support.get("checkin_minutes", 20)))
+        self._s_checkin_minutes.setSuffix(" minutes")
+        support_form.addRow("Check-in interval", self._s_checkin_minutes)
+        support_lay.addLayout(support_form)
+
+        save_support = QPushButton("SAVE SUPPORT PREFERENCES")
+        self._s_save_support = save_support
+        save_support.clicked.connect(self._emit_focus_support)
+        support_lay.addWidget(save_support)
+        support_lay.addStretch()
+        self._s_stack.addWidget(support_page)
+
         self._switch_s_tab(0)
         self._highlight_theme(current_theme)
         self._highlight_graphics(self._current_graphics)
         self._setup_overlay_base(close_callback=self.hide)
+        self.refresh_theme()
 
     def _switch_s_tab(self, idx: int):
         self._s_active_tab = idx
@@ -5377,6 +6324,22 @@ class SettingsOverlay(_OverlayBase):
         self._highlight_theme(self._current_theme)
         self._highlight_graphics(self._current_graphics)
         self._graphics_note.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        for checkbox in (
+            self._s_support_enabled, self._s_continuity, self._s_reduced_choices,
+            self._s_reduced_motion, self._s_gentle_checkins,
+        ):
+            checkbox.setStyleSheet(f"color: {C.WHITE_DIM}; background: transparent; spacing: 7px;")
+        for spinbox in (self._s_max_choices, self._s_focus_minutes, self._s_checkin_minutes):
+            spinbox.setStyleSheet(f"""
+                QSpinBox {{ background: {C.DARK}; color: {C.WHITE}; border: 1px solid {C.BORDER};
+                            border-radius: 4px; padding: 4px; }}
+                QSpinBox:focus {{ border-color: {C.PRI}; }}
+            """)
+        self._s_save_support.setStyleSheet(f"""
+            QPushButton {{ background: {C.PRI_GHO}; color: {C.PRI}; border: 1px solid {C.PRI_DIM};
+                           border-radius: 4px; padding: 8px; }}
+            QPushButton:hover, QPushButton:focus {{ border-color: {C.PRI}; background: {C.PANEL2}; }}
+        """)
 
     def _highlight_theme(self, key: str):
         for k, btn in self._theme_btns.items():
@@ -5396,10 +6359,162 @@ class SettingsOverlay(_OverlayBase):
                     QPushButton:hover {{ color: {C.PRI}; border: 1px solid {C.BORDER_B}; }}
                 """)
 
+    def _emit_focus_support(self):
+        values = dict(self._focus_support)
+        values.update({
+            "enabled": self._s_support_enabled.isChecked(),
+            "setup_completed": True,
+            "continuity_notes": self._s_continuity.isChecked(),
+            "reduced_choices": self._s_reduced_choices.isChecked(),
+            "reduced_motion": self._s_reduced_motion.isChecked(),
+            "gentle_checkins": self._s_gentle_checkins.isChecked(),
+            "max_choices": self._s_max_choices.value(),
+            "focus_minutes": self._s_focus_minutes.value(),
+            "checkin_minutes": self._s_checkin_minutes.value(),
+        })
+        self._focus_support = values
+        self.focus_support_changed.emit(values)
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.hide()
         super().keyPressEvent(event)
+
+
+class FocusSupportSetupOverlay(_OverlayBase):
+    """One-time, opt-in setup for attention and sensory support preferences."""
+
+    finished = pyqtSignal(object)
+
+    def __init__(self, parent=None, current: dict | None = None):
+        super().__init__(parent)
+        self._current = dict(current or get_focus_support_settings())
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAccessibleName("Focus support guided setup")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 22, 28, 22)
+        layout.setSpacing(10)
+
+        title = QLabel("FOCUS SUPPORT")
+        title.setFont(QFont(UI_FONT, 16, QFont.Weight.DemiBold))
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        intro = QLabel(
+            "Choose what makes JARVIS easier to return to and less demanding to scan. "
+            "These are interface preferences—not a diagnosis—and every option can be changed later."
+        )
+        intro.setWordWrap(True)
+        intro.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        intro.setFont(QFont(UI_FONT, 9))
+        layout.addWidget(intro)
+
+        options = QFrame()
+        options.setObjectName("FocusSetupOptions")
+        form = QFormLayout(options)
+        form.setContentsMargins(16, 14, 16, 14)
+        form.setHorizontalSpacing(18)
+        form.setVerticalSpacing(10)
+
+        self._continuity = QCheckBox("Restore a short resume point after interruptions")
+        self._continuity.setChecked(bool(self._current.get("continuity_notes", True)))
+        form.addRow("Continuity", self._continuity)
+
+        self._reduced_choices = QCheckBox("Show fewer decisions at one time")
+        self._reduced_choices.setChecked(bool(self._current.get("reduced_choices", True)))
+        form.addRow("Choice load", self._reduced_choices)
+
+        self._max_choices = QSpinBox()
+        self._max_choices.setRange(2, 3)
+        self._max_choices.setValue(int(self._current.get("max_choices", 3)))
+        self._max_choices.setSuffix(" choices")
+        form.addRow("Maximum shown", self._max_choices)
+
+        self._focus_minutes = QSpinBox()
+        self._focus_minutes.setRange(5, 90)
+        self._focus_minutes.setValue(int(self._current.get("focus_minutes", 25)))
+        self._focus_minutes.setSuffix(" minutes")
+        form.addRow("Focus interval", self._focus_minutes)
+
+        self._gentle_checkins = QCheckBox("Offer a neutral check-in during longer sessions")
+        self._gentle_checkins.setChecked(bool(self._current.get("gentle_checkins", True)))
+        form.addRow("Check-ins", self._gentle_checkins)
+
+        self._checkin_minutes = QSpinBox()
+        self._checkin_minutes.setRange(0, 60)
+        self._checkin_minutes.setSpecialValueText("Off")
+        self._checkin_minutes.setValue(int(self._current.get("checkin_minutes", 20)))
+        self._checkin_minutes.setSuffix(" minutes")
+        form.addRow("Check-in interval", self._checkin_minutes)
+
+        self._reduced_motion = QCheckBox("Reduce nonessential motion and staged reveals")
+        self._reduced_motion.setChecked(bool(self._current.get("reduced_motion", True)))
+        form.addRow("Motion", self._reduced_motion)
+        layout.addWidget(options)
+
+        reassurance = QLabel("No streaks, pressure scores, or guilt-based reminders will be added.")
+        reassurance.setFont(QFont(UI_FONT, 8))
+        reassurance.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(reassurance)
+
+        actions = QHBoxLayout()
+        skip = QPushButton("NOT NOW")
+        skip.setAccessibleName("Continue without focus support")
+        skip.clicked.connect(self._skip)
+        actions.addWidget(skip)
+        save = QPushButton("ENABLE SUPPORT")
+        save.setAccessibleName("Save focus support preferences")
+        save.clicked.connect(self._save)
+        actions.addWidget(save, stretch=1)
+        layout.addLayout(actions)
+        self._skip_btn = skip
+        self._save_btn = save
+        self._setup_overlay_base(close_callback=self._skip)
+        self.refresh_theme()
+
+    def values(self, enabled: bool = True) -> dict:
+        return {
+            "enabled": bool(enabled),
+            "setup_completed": True,
+            "continuity_notes": self._continuity.isChecked(),
+            "reduced_choices": self._reduced_choices.isChecked(),
+            "max_choices": self._max_choices.value(),
+            "focus_minutes": self._focus_minutes.value(),
+            "gentle_checkins": self._gentle_checkins.isChecked(),
+            "checkin_minutes": self._checkin_minutes.value(),
+            "reduced_motion": self._reduced_motion.isChecked(),
+            "quiet_mode": bool(self._current.get("quiet_mode", False)),
+        }
+
+    def _save(self):
+        self.finished.emit(self.values(True))
+        self.hide()
+
+    def _skip(self):
+        values = self.values(False)
+        values["continuity_notes"] = False
+        values["gentle_checkins"] = False
+        self.finished.emit(values)
+        self.hide()
+
+    def refresh_theme(self):
+        self.setStyleSheet(f"""
+            FocusSupportSetupOverlay {{ background: {C.BG}; border: 1px solid {C.BORDER_B}; border-radius: 8px; }}
+            QLabel {{ color: {C.WHITE_DIM}; background: transparent; }}
+            QFrame#FocusSetupOptions {{ background: {C.PANEL}; border: 1px solid {C.BORDER}; border-radius: 6px; }}
+            QCheckBox {{ color: {C.WHITE}; spacing: 8px; }}
+            QCheckBox::indicator {{ width: 17px; height: 17px; border: 1px solid {C.BORDER_B}; background: {C.DARK}; }}
+            QCheckBox::indicator:checked {{ background: {C.PRI}; border-color: {C.PRI}; }}
+            QSpinBox {{ background: {C.DARK}; color: {C.WHITE}; border: 1px solid {C.BORDER}; border-radius: 4px; padding: 5px; }}
+        """)
+        self._save_btn.setStyleSheet(f"""
+            QPushButton {{ background: {C.PRI_GHO}; color: {C.PRI}; border: 1px solid {C.PRI_DIM}; border-radius: 4px; padding: 9px; }}
+            QPushButton:hover, QPushButton:focus {{ border-color: {C.PRI}; background: {C.PANEL2}; }}
+        """)
+        self._skip_btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {C.WHITE_DIM}; border: 1px solid {C.BORDER}; border-radius: 4px; padding: 9px; }}
+            QPushButton:hover, QPushButton:focus {{ color: {C.WHITE}; border-color: {C.BORDER_B}; }}
+        """)
 
 
 class NameSignInOverlay(_OverlayBase):
@@ -6612,6 +7727,8 @@ class MainWindow(QMainWindow):
     def __init__(self, face_path: str):
         super().__init__()
         _load_bundled_fonts()
+        initial_theme = str(_read_ui_settings().get("theme") or "calm_mint")
+        ThemeManager.set_theme(initial_theme if initial_theme in ThemeManager.theme_names() else "calm_mint")
         self.setWindowTitle("J.A.R.V.I.S — MARK XXXIX")
         self.setMinimumSize(_MIN_W, _MIN_H)
 
@@ -6653,9 +7770,13 @@ class MainWindow(QMainWindow):
         self._compact_widget: CompactModeWidget | None = None
         self._shortcuts_overlay: ShortcutsOverlay | None = None
         self._settings_overlay: SettingsOverlay | None = None
+        self._focus_support_overlay: FocusSupportSetupOverlay | None = None
         self._vision_preview: VisionPreviewWindow | None = None
         self._force_quit            = False
-        self._command_center_open   = False
+        self._command_center_open   = True
+        self._left_target_w         = _LEFT_W
+        self._right_target_w        = _RIGHT_W
+        self._focus_support         = get_focus_support_settings()
         self._graphics_quality      = get_graphics_quality()
 
         self.setStyleSheet(f"""
@@ -6695,7 +7816,22 @@ class MainWindow(QMainWindow):
 
         self.hud = HudCanvas(face_path, config=hud_config)
         self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        ai_core_lay.addWidget(self.hud, stretch=4)
+
+        # Mission Board is the confirmed default workspace. Focus View retains
+        # the cinematic reactor and can be entered without losing board state.
+        self._workspace_stack = QStackedWidget(self._ai_core_wrap)
+        self._workspace_stack.setObjectName("JarvisWorkspaceStack")
+        self._workspace_stack.setStyleSheet("background: transparent; border: none;")
+        self._mission_board = HybridMissionBoard(
+            parent=self._workspace_stack,
+            support_settings=self._focus_support,
+        )
+        self._mission_board.command_submitted.connect(self._send)
+        self._mission_board.focus_view_requested.connect(lambda: self._set_command_center(False))
+        self._mission_board.support_settings_requested.connect(self._show_focus_support_setup)
+        self._workspace_stack.addWidget(self._mission_board)
+        self._workspace_stack.addWidget(self.hud)
+        ai_core_lay.addWidget(self._workspace_stack, stretch=4)
 
         self._research_progress = ResearchProgressWidget(parent=self._ai_core_wrap)
         ai_core_lay.addWidget(self._research_progress, stretch=0)
@@ -6767,7 +7903,7 @@ class MainWindow(QMainWindow):
         # expanded Command Center without reading as application status.
         self._maker_signature = self._build_maker_signature()
         root.addWidget(self._maker_signature)
-        self._set_command_center(False, announce=False)
+        self._set_command_center(True, announce=False)
 
         self._clock_tmr = QTimer(self)
         self._clock_tmr.timeout.connect(self._tick_clock)
@@ -6825,16 +7961,11 @@ class MainWindow(QMainWindow):
 
         # ── Theme manager listener ───────────────────────────────────────────
         ThemeManager.add_listener(self._on_theme_changed)
-        # Load saved theme on boot
+        # Load the same persisted theme source used by every other UI setting.
         try:
-            from pathlib import Path
-            import json
-            cfg_file = Path.home() / ".jarvis" / "config" / "settings.json"
-            if cfg_file.exists():
-                cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
-                saved_theme = cfg.get("theme", "")
-                if saved_theme and saved_theme in ThemeManager.theme_names():
-                    ThemeManager.set_theme(saved_theme)
+            saved_theme = str(_read_ui_settings().get("theme") or "")
+            if saved_theme in ThemeManager.theme_names():
+                ThemeManager.set_theme(saved_theme)
         except Exception:
             pass
 
@@ -7055,8 +8186,9 @@ class MainWindow(QMainWindow):
             current_name=current_name,
             current_theme=ThemeManager.current_name(),
             current_graphics=self._graphics_quality,
+            focus_support=self._focus_support,
         )
-        ow, oh = 560, 410
+        ow, oh = 560, 470
         ov.setGeometry(
             (cw.width() - ow) // 2,
             (cw.height() - oh) // 2,
@@ -7065,6 +8197,7 @@ class MainWindow(QMainWindow):
         ov.name_changed.connect(self._on_settings_name)
         ov.theme_changed.connect(self._on_settings_theme)
         ov.graphics_changed.connect(self._on_settings_graphics)
+        ov.focus_support_changed.connect(self._apply_focus_support)
         ov.show()
         self._settings_overlay = ov
 
@@ -7077,6 +8210,52 @@ class MainWindow(QMainWindow):
 
     def _on_settings_graphics(self, quality: str):
         self._apply_graphics_quality_live(quality)
+
+    def _apply_focus_support(self, values: dict):
+        """Persist and apply attention-support preferences without restarting."""
+        self._focus_support = set_focus_support_settings(dict(values or {}))
+        if hasattr(self, "_mission_board"):
+            self._mission_board.apply_preferences(self._focus_support)
+        if self._settings_overlay is not None:
+            self._settings_overlay._focus_support = dict(self._focus_support)
+        if self._focus_support_overlay is not None:
+            self._focus_support_overlay._current = dict(self._focus_support)
+        message = "Focus support preferences saved"
+        if not self._focus_support.get("enabled", True):
+            message = "Focus support is off — you can change this anytime"
+        if hasattr(self, "_popup_manager"):
+            self._show_toast(message, "success")
+
+    def _show_focus_support_setup(self):
+        """Open the guided, opt-in support setup from startup or the board."""
+        if self._focus_support_overlay and self._focus_support_overlay.isVisible():
+            self._focus_support_overlay.raise_()
+            return
+        cw = self.centralWidget()
+        overlay = FocusSupportSetupOverlay(cw, current=self._focus_support)
+        overlay.finished.connect(self._apply_focus_support)
+        overlay.finished.connect(lambda _values: overlay.hide())
+        width = min(660, max(480, cw.width() - 48))
+        height = min(590, max(500, cw.height() - 48))
+        overlay.setGeometry(
+            max(0, (cw.width() - width) // 2),
+            max(0, (cw.height() - height) // 2),
+            width,
+            height,
+        )
+        overlay.show()
+        overlay.raise_()
+        overlay.setFocus()
+        self._focus_support_overlay = overlay
+
+    def _maybe_show_focus_support_setup(self):
+        if not getattr(self, "_ready", False):
+            return
+        blocking = (self._overlay, self._name_overlay, self._voice_overlay)
+        if any(overlay is not None and overlay.isVisible() for overlay in blocking):
+            return
+        if not bool(self._focus_support.get("setup_completed", False)):
+            self._show_focus_support_setup()
 
     def _show_vision_preview(self, source: str):
         if self._vision_preview is None:
@@ -7175,6 +8354,8 @@ class MainWindow(QMainWindow):
         self._update_theme_btn()
         if hasattr(self, "_mission"):
             self._mission.refresh_theme()
+        if hasattr(self, "_mission_board"):
+            self._mission_board.refresh_theme()
         if hasattr(self, "_focus_dialogue"):
             self._focus_dialogue.refresh_theme()
         if hasattr(self, "_research_progress"):
@@ -7184,6 +8365,8 @@ class MainWindow(QMainWindow):
             self._subtitle._active_col = qcol(C.PRI)
         if self._settings_overlay:
             self._settings_overlay.refresh_theme()
+        if self._focus_support_overlay:
+            self._focus_support_overlay.refresh_theme()
         if self._vision_preview is not None:
             self._vision_preview.refresh_theme()
 
@@ -7200,15 +8383,7 @@ class MainWindow(QMainWindow):
             widget.update()
 
         try:
-            settings_dir = Path.home() / ".jarvis" / "config"
-            settings_dir.mkdir(parents=True, exist_ok=True)
-            settings_file = settings_dir / "settings.json"
-            try:
-                settings = json.loads(settings_file.read_text(encoding="utf-8")) if settings_file.exists() else {}
-            except Exception:
-                settings = {}
-            settings["theme"] = key
-            settings_file.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+            _update_ui_settings(theme=key)
         except Exception:
             pass
 
@@ -7243,14 +8418,24 @@ class MainWindow(QMainWindow):
         transition_id = self._command_transition_id
         if hasattr(self, "_mission"):
             self._mission.set_command_center_open(is_open)
+        if hasattr(self, "_workspace_stack"):
+            target = self._mission_board if is_open else self.hud
+            self._workspace_stack.setCurrentWidget(target)
         if hasattr(self, "_right_panel"):
             self._right_panel.setFixedWidth(_RIGHT_W)
             self._right_panel.setVisible(is_open)
         if hasattr(self, "_focus_dialogue"):
             self._focus_dialogue.setVisible(not is_open)
+        if hasattr(self, "_view_mode_button"):
+            self._view_mode_button.setText("FOCUS VIEW" if is_open else "MISSION BOARD")
+            self._view_mode_button.setAccessibleName(
+                "Open Focus View" if is_open else "Open Mission Board"
+            )
         if hasattr(self, "_splitter"):
             if is_open:
-                self._splitter.setSizes([_LEFT_W, max(420, self.width() - _LEFT_W - _RIGHT_W), _RIGHT_W])
+                # Conversation stays visible on the right; the system rail starts
+                # collapsed so Now / Next / Later remain comfortably scannable.
+                self._splitter.setSizes([0, max(560, self.width() - _RIGHT_W), _RIGHT_W])
             else:
                 self._splitter.setSizes([0, max(720, self.width()), 0])
 
@@ -7289,7 +8474,14 @@ class MainWindow(QMainWindow):
             self._announce_command_center_modules()
 
     def _reveal_widget(self, widget: QWidget, delay_ms: int = 0, transition_id: int | None = None):
-        """Reveal a module with a short, stagger-friendly opacity transition."""
+        """Reveal a module, respecting the user's reduced-motion preference."""
+        if (
+            self._focus_support.get("enabled", True)
+            and self._focus_support.get("reduced_motion", False)
+        ):
+            widget.setGraphicsEffect(None)
+            widget.show()
+            return
         effect = QGraphicsOpacityEffect(widget)
         effect.setOpacity(0.0)
         widget.setGraphicsEffect(effect)
@@ -7403,6 +8595,16 @@ class MainWindow(QMainWindow):
                 (cw.width()  - ow) // 2,
                 (cw.height() - oh) // 2,
                 ow, oh,
+            )
+        if self._settings_overlay and self._settings_overlay.isVisible():
+            ow, oh = min(560, cw.width() - 32), min(470, cw.height() - 32)
+            self._settings_overlay.setGeometry(
+                max(0, (cw.width() - ow) // 2), max(0, (cw.height() - oh) // 2), ow, oh
+            )
+        if self._focus_support_overlay and self._focus_support_overlay.isVisible():
+            ow, oh = min(660, cw.width() - 48), min(590, cw.height() - 48)
+            self._focus_support_overlay.setGeometry(
+                max(0, (cw.width() - ow) // 2), max(0, (cw.height() - oh) // 2), ow, oh
             )
 
     def _update_metrics(self):
@@ -8425,6 +9627,8 @@ class MainWindow(QMainWindow):
             if not txt:
                 return
             self._log.append_log(f"You: {txt}")
+            if hasattr(self, "_mission_board"):
+                self._mission_board.note_user_command(txt)
             normalized = re.sub(r"[^a-z ]+", " ", txt.lower())
             normalized = " ".join(normalized.split())
             if normalized in {
@@ -8459,6 +9663,8 @@ class MainWindow(QMainWindow):
     def _apply_state(self, state: str):
         self.hud.state    = state
         self.hud.speaking = (state == "SPEAKING")
+        if hasattr(self, "_mission_board"):
+            self._mission_board.set_jarvis_state(state)
         if hasattr(self, "_rail_mode_lbl"):
             self._rail_mode_lbl.setText(f"LOCAL  /  {state}")
             rail_color = {
@@ -8511,6 +9717,8 @@ class MainWindow(QMainWindow):
     def _parse_log_for_context(self, text: str):
         """Detect context from log messages and feed task/tool widgets."""
         tl = text.lower()
+        if hasattr(self, "_mission_board") and tl.startswith(("you:", "user:")):
+            self._mission_board.note_user_command(text.split(":", 1)[-1].strip())
 
         # Context mode detection
         if any(k in tl for k in ("code_helper", "dev_agent", "coding", "python", "javascript")):
@@ -8578,6 +9786,8 @@ class MainWindow(QMainWindow):
                     self._task_sig.emit(label, status)
                 except Exception:
                     pass
+                if hasattr(self, "_mission_board"):
+                    self._mission_board.ingest_task(label, status)
                 break
 
         # Tool log feeding — forward SYS/tool lines to tool widget
@@ -8710,7 +9920,8 @@ class MainWindow(QMainWindow):
             elif isinstance(name_entry, str):
                 name = name_entry
             if name and name.strip():
-                # Name already known — no need to ask
+                # Name already known — continue into the optional support setup.
+                QTimer.singleShot(350, self._maybe_show_focus_support_setup)
                 return
         except Exception:
             pass
@@ -8796,6 +10007,7 @@ class MainWindow(QMainWindow):
             self._name_overlay.hide()
             self._name_overlay.deleteLater()
             self._name_overlay = None
+        QTimer.singleShot(250, self._maybe_show_focus_support_setup)
 
     def _on_name_done(self, name: str):
         if self._name_overlay:
@@ -8803,7 +10015,8 @@ class MainWindow(QMainWindow):
             self._name_overlay.deleteLater()
             self._name_overlay = None
         if not name or not name.strip():
-            # X button was pressed — don't overwrite saved name
+            # X button was pressed — don't overwrite saved name.
+            QTimer.singleShot(250, self._maybe_show_focus_support_setup)
             return
         # Always save — "Sir" is the default when skipped
         save_name = name.strip() if name.strip() else "Sir"
@@ -8823,6 +10036,7 @@ class MainWindow(QMainWindow):
                 self._log.append_log(f"SYS: Name callback error: {e}")
         # Refresh the button label to show current name
         self._update_name_btn()
+        QTimer.singleShot(250, self._maybe_show_focus_support_setup)
 
     def _update_name_btn(self):
         """Update the Change Name button to show the currently saved name."""
