@@ -1,16 +1,19 @@
 #computer_control.py
 import io
 import json
+import platform
 import re
 import string
 import subprocess
 import sys
+
+if platform.system() == "Windows":
+    _WIN_HIDE: dict = {"creationflags": subprocess.CREATE_NO_WINDOW}
+else:
+    _WIN_HIDE: dict = {}
 import time
 import random
 from pathlib import Path
-
-from actions.jarvis_file_stamp import mark_created_file
-from actions.safe_text_entry import safe_type_text
 
 try:
     import pyautogui
@@ -42,8 +45,13 @@ def _load_config() -> dict:
     except Exception:
         return {}
 
+def _platform_os() -> str:
+    return {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}.get(
+        platform.system(), "linux"
+    )
+
 def _get_os() -> str:
-    return _load_config().get("os_system", "windows").lower()
+    return _load_config().get("os_system", _platform_os()).lower()
 
 
 def _get_api_key() -> str:
@@ -147,16 +155,27 @@ def _user_profile() -> dict:
     return {}
 
 def _type(text: str, interval: float = 0.03) -> str:
-    result = safe_type_text(text, purpose="generic", interval=min(interval, 0.002))
-    if not result.ok:
-        return result.message
-    return f"Typed safely: {text[:60]}{'…' if len(text) > 60 else ''}"
+    _require_pyautogui()
+    time.sleep(0.3)
+    pyautogui.typewrite(text, interval=interval)
+    return f"Typed: {text[:60]}{'…' if len(text) > 60 else ''}"
+
 
 def _smart_type(text: str, clear_first: bool = True) -> str:
-    result = safe_type_text(text, purpose="generic", clear_first=clear_first)
-    if not result.ok:
-        return result.message
-    return f"Smart-typed safely: {text[:60]}{'…' if len(text) > 60 else ''}"
+    _require_pyautogui()
+    if clear_first:
+        _clear_field()
+        time.sleep(0.1)
+
+    if len(text) > 20 and _PYPERCLIP:
+        pyperclip.copy(text)
+        time.sleep(0.1)
+        paste_key = "command" if _get_os() == "mac" else "ctrl"
+        pyautogui.hotkey(paste_key, "v")
+        return f"Smart-typed (clipboard): {text[:60]}{'…' if len(text) > 60 else ''}"
+
+    pyautogui.typewrite(text, interval=0.04)
+    return f"Smart-typed: {text[:60]}{'…' if len(text) > 60 else ''}"
 
 
 def _click(x=None, y=None, button: str = "left", clicks: int = 1) -> str:
@@ -210,10 +229,14 @@ def _clipboard_get() -> str:
 
 
 def _clipboard_paste(text: str) -> str:
-    result = safe_type_text(text, purpose="generic")
-    if not result.ok:
-        return result.message
-    return f"Pasted safely: {text[:60]}{'…' if len(text) > 60 else ''}"
+    if _PYPERCLIP:
+        pyperclip.copy(text)
+        time.sleep(0.1)
+        _require_pyautogui()
+        paste_key = "command" if _get_os() == "mac" else "ctrl"
+        pyautogui.hotkey(paste_key, "v")
+        return f"Pasted: {text[:60]}{'…' if len(text) > 60 else ''}"
+    return "pyperclip not available"
 
 
 def _screenshot(save_path: str | None = None) -> str:
@@ -221,15 +244,16 @@ def _screenshot(save_path: str | None = None) -> str:
     path = _safe_screenshot_path(save_path)
     img  = pyautogui.screenshot()
     img.save(str(path))
-    mark_created_file(path, "Screenshot captured by JARVIS computer_control.")
     return f"Screenshot saved: {path}"
 
 
 def _clear_field() -> str:
-    result = safe_type_text("", purpose="generic", clear_first=True)
-    if not result.ok:
-        return result.message
-    return "Field cleared safely"
+    _require_pyautogui()
+    select_key = "command" if _get_os() == "mac" else "ctrl"
+    pyautogui.hotkey(select_key, "a")
+    time.sleep(0.1)
+    pyautogui.press("delete")
+    return "Field cleared"
 
 def _focus_window(title: str) -> str:
     os_name = _get_os()
@@ -239,7 +263,7 @@ def _focus_window(title: str) -> str:
             script = f'(New-Object -ComObject WScript.Shell).AppActivate("{title}")'
             subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True, timeout=5,
+                capture_output=True, timeout=5, **_WIN_HIDE,
             )
             time.sleep(0.3)
             return f"Focused window: {title}"
@@ -303,7 +327,6 @@ def _screen_find(description: str) -> tuple[int, int] | None:
         img.save(buf, format="PNG")
         image_bytes = buf.getvalue()
 
-        client = genai.Client(api_key=api_key)
         prompt = (
             f"This is a screenshot of a {w}×{h} pixel screen. "
             f"Locate the UI element described as: '{description}'. "
@@ -311,13 +334,13 @@ def _screen_find(description: str) -> tuple[int, int] | None:
             f"If the element is not visible, reply: NOT_FOUND"
         )
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=[
-                gtypes.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                prompt,
-            ],
+        from core import gemini
+        response = gemini.call(
+            [gtypes.Part.from_bytes(data=image_bytes, mime_type="image/png"), prompt],
+            tier=gemini.FAST, timeout_ms=20_000,
         )
+        if response is None:
+            return None
 
         text = (response.text or "").strip()
         if "NOT_FOUND" in text.upper():
@@ -488,3 +511,79 @@ def computer_control(
     except Exception as e:
         print(f"[ComputerControl] ❌ {action}: {e}")
         return f"computer_control '{action}' failed: {e}"
+
+
+# ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
+TOOL = {
+    "name": "computer_control",
+    "description": "Direct computer control: type, click, hotkeys, scroll, move mouse, screenshots, find elements on screen.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action": {
+                "type": "STRING",
+                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | screen_find | screen_click | random_data | user_data"
+            },
+            "text": {
+                "type": "STRING",
+                "description": "Text to type or paste"
+            },
+            "x": {
+                "type": "INTEGER",
+                "description": "X coordinate"
+            },
+            "y": {
+                "type": "INTEGER",
+                "description": "Y coordinate"
+            },
+            "keys": {
+                "type": "STRING",
+                "description": "Key combination e.g. 'ctrl+c'"
+            },
+            "key": {
+                "type": "STRING",
+                "description": "Single key e.g. 'enter'"
+            },
+            "direction": {
+                "type": "STRING",
+                "description": "up | down | left | right"
+            },
+            "amount": {
+                "type": "INTEGER",
+                "description": "Scroll amount (default: 3)"
+            },
+            "seconds": {
+                "type": "NUMBER",
+                "description": "Seconds to wait"
+            },
+            "title": {
+                "type": "STRING",
+                "description": "Window title for focus_window"
+            },
+            "description": {
+                "type": "STRING",
+                "description": "Element description for screen_find/screen_click"
+            },
+            "type": {
+                "type": "STRING",
+                "description": "Data type for random_data"
+            },
+            "field": {
+                "type": "STRING",
+                "description": "Field for user_data: name|email|city"
+            },
+            "clear_first": {
+                "type": "BOOLEAN",
+                "description": "Clear field before typing (default: true)"
+            },
+            "path": {
+                "type": "STRING",
+                "description": "Save path for screenshot"
+            }
+        },
+        "required": [
+            "action"
+        ]
+    },
+    "handler": computer_control,
+}
