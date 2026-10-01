@@ -242,6 +242,10 @@ Your choice is stored **by name, not by index** — indices shift whenever somet
 
 The handle is captured and replayed now. A network blip, or switching your microphone, keeps the conversation intact.
 
+A transient error on **Google's side** — a websocket close 1011, "Internal error encountered" — gets one reconnect WITH the handle before anything is thrown away, so a blip mid-conversation comes back as "conversation restored" rather than a cold start. Only a second consecutive failure, or the server explicitly refusing the handle, starts fresh; a handle the server keeps refusing must never become the thing that prevents reconnecting.
+
+The hole this closed was subtle: every mid-session error surfaces wrapped in a TaskGroup whose own message is "unhandled errors in a TaskGroup" — and "unhandled" contains "handle", so the handle-rejection check matched *every* failure, and each dropped packet or server hiccup silently discarded a perfectly good handle. The ladder now matches against what the leaf exceptions actually said.
+
 It is held in memory only, deliberately: writing it to disk would make a fresh launch continue yesterday's chat, which sounds appealing but breaks the session-summary flow — a conversation that never ends never produces a summary, and the "yesterday we talked about…" line in the morning briefing silently disappears. Changing the **voice** also starts clean on purpose, since resuming restores the server's session state and would likely bring the old voice back with it.
 
 ### 🩹 Fixes that came with it

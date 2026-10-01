@@ -89,6 +89,17 @@ from core.wake_word            import (
 # again (wake-word mode only).
 WAKE_SLEEP_TIMEOUT = 120.0   # seconds (2 minutes)
 
+# ── Session resumption vs. transient server errors ──────────────────────────
+# A websocket close 1011 ("Internal error encountered") or a 5xx is Google's
+# own infrastructure having a moment. It says nothing about whether the
+# resumption handle is still good — the handle almost always outlives the
+# blip — so a transient error earns a reconnect WITH the handle (conversation
+# restored) this many times before the handle is dropped and the session
+# starts fresh. One: a second consecutive failure means the resume itself is
+# not working, and replaying a suspect handle forever is how a bad handle
+# wedges recovery entirely.
+_RESUME_TRANSIENT_RETRIES = 1
+
 def get_base_dir():
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
@@ -535,6 +546,93 @@ def _keep_context_of(exc: BaseException) -> bool:
     return True
 
 
+def _leaf_exceptions(exc: BaseException) -> list[BaseException]:
+    """Flatten `exc` into the exceptions that actually failed.
+
+    A session TaskGroup wraps whatever its tasks raised into one group whose
+    own message is pure boilerplate — "unhandled errors in a TaskGroup" — and
+    that boilerplate must never be matched against: "unhandled" contains
+    "handle", which made EVERY mid-session failure look like a resumption-
+    handle rejection and cost the conversation on each one. The leaves are
+    where the real error text lives.
+    """
+    if isinstance(exc, BaseExceptionGroup):
+        leaves: list[BaseException] = []
+        for sub in exc.exceptions:
+            leaves.extend(_leaf_exceptions(sub))
+        return leaves
+    return [exc]
+
+
+def _error_text(exc: BaseException) -> str:
+    """The messages of everything that failed, never the group's wrapper text.
+
+    Connect-time errors arrive bare, so this is just their message; mid-session
+    errors arrive inside the TaskGroup group, and this unwraps it so every
+    branch of the reconnect ladder sees what the server actually said — the
+    group's own "unhandled errors in a TaskGroup" matches nothing any branch
+    looks for (except, fatally, "handle"). Duplicate leaves are collapsed:
+    several tasks routinely raise the same APIError when the socket dies
+    under them.
+    """
+    return " | ".join(
+        dict.fromkeys(str(leaf) for leaf in _leaf_exceptions(exc))
+    ) or str(exc)
+
+
+def _is_transient_server_error(exc: BaseException) -> bool:
+    """True when the failure is the server's, not ours: a websocket close 1011
+    ("Internal error encountered"), an HTTP 5xx, an overloaded or temporarily
+    unavailable blip.
+
+    These say nothing about the resumption handle — it very likely outlives
+    Google's bad moment — which is exactly why they earn a retry WITH the
+    handle instead of a cold start. Quota (429) and gone (404/403) errors are
+    deliberately excluded: those are real answers, not hiccups, and belong to
+    the model ladder further down."""
+    for leaf in _leaf_exceptions(exc):
+        code = getattr(leaf, "code", None)
+        if isinstance(code, int) and (code == 1011 or 500 <= code <= 599):
+            return True
+        low = str(leaf).lower()
+        if ("internal error" in low
+                or "overloaded" in low
+                or "temporarily unavailable" in low):
+            return True
+    return False
+
+
+def _resume_action(exc: BaseException, retries_left: int) -> str:
+    """What a failure says to do with the resumption handle — the whole
+    keep-or-drop decision in one testable place.
+
+    "retry"  Google's own bad moment and the one fast retry with the handle
+             intact is still unspent: reconnect WITH the handle, and the
+             conversation comes back instead of starting over.
+    "drop"   Either the server refused the handle outright (expired, or its
+             session is gone), or that one retry already failed. Without
+             dropping it, the same dead handle would be replayed on every
+             attempt and the assistant would never come back at all: the
+             feature meant to survive a reconnect would be the thing
+             preventing one.
+    "keep"   The failure says nothing about the handle (a network blip, a
+             quota step-down, an audio device error): hold it, let the rest
+             of the ladder pick the backoff, and the next connect still tries
+             to resume.
+
+    Only called while a handle is actually held; the caller owns the budget.
+    """
+    if _is_transient_server_error(exc):
+        return "retry" if retries_left > 0 else "drop"
+    text = _error_text(exc)
+    if ("resum" in text.lower()
+            or "handle" in text.lower()
+            or "INVALID_ARGUMENT" in text
+            or "NOT_FOUND" in text):
+        return "drop"
+    return "keep"
+
+
 class JarvisLive:
     def __init__(self, ui: JarvisUI):
         self.ui             = ui
@@ -599,6 +697,11 @@ class JarvisLive:
         # conversation that never ends never produces a summary, and the
         # "yesterday we talked about…" line silently disappears.
         self._resume_handle: str | None = None
+        # Transient-server-error retries left for the handle currently held
+        # (see _RESUME_TRANSIENT_RETRIES). Refilled on every successful
+        # connect, so a healthy session always gets its one rescue even after
+        # an earlier blip spent it.
+        self._resume_retries_left = _RESUME_TRANSIENT_RETRIES
         self._turn_done_event: asyncio.Event | None = None
         self._dashboard     = None
         self._briefing_sent    = False          # morning briefing fires once per process
@@ -2132,6 +2235,10 @@ class JarvisLive:
                     self._interrupted          = False
 
                     print("[JARVIS] Connected.")
+                    # A handle that reached a live session has proved itself:
+                    # refill the transient-retry budget so the next blip gets
+                    # its rescue too.
+                    self._resume_retries_left = _RESUME_TRANSIENT_RETRIES
                     if _resumed_with:
                         # Say it plainly: the difference between "it reconnected"
                         # and "it reconnected and still knows what we were doing"
@@ -2194,26 +2301,49 @@ class JarvisLive:
                     self._conn_backoff = 0
                     continue
 
-                # A resumption handle the server will not accept — expired, or
-                # belonging to a session it has since dropped. Without this, the
-                # same dead handle would be replayed on every retry and the
-                # assistant would never come back at all: the feature meant to
-                # survive a reconnect would be the thing preventing one. Drop it
-                # once and let the next attempt start clean.
-                if _resumed_with and (
-                    "resum" in str(e).lower()
-                    or "handle" in str(e).lower()
-                    or "INVALID_ARGUMENT" in str(e)
-                    or "NOT_FOUND" in str(e)
-                ):
-                    print("[JARVIS] 🔗 Resumption handle rejected — starting a fresh session")
-                    self.ui.write_log("SYS: Could not restore the conversation — starting fresh.")
-                    self._resume_handle = None
-                    self._conn_backoff = 0
-                    continue
+                # What did the server actually say? A mid-session failure
+                # arrives wrapped in the TaskGroup group, whose own message is
+                # boilerplate that matches nothing — except "handle", via
+                # "unhandled" (see _leaf_exceptions). Every branch below reads
+                # the unwrapped text instead.
+                err_str = _error_text(e)
 
-                err_str = str(e)
-                print(f"[JARVIS] Error ({type(e).__name__}): {e}")
+                if _resumed_with:
+                    _action = _resume_action(e, self._resume_retries_left)
+                    if _action == "retry":
+                        # A transient error on Google's side — websocket 1011
+                        # "Internal error encountered", a 5xx — while holding a
+                        # resume handle. The error is the server's, not the
+                        # handle's: reconnect WITH it and the conversation
+                        # survives the blip instead of starting over. Like
+                        # every branch of this ladder, the reconnect is
+                        # immediate — `continue` skips the bottom sleep.
+                        self._resume_retries_left -= 1
+                        print("[JARVIS] ⚡ Transient server error — "
+                              "reconnecting with the conversation intact")
+                        self.ui.write_log("SYS: Server hiccup — reconnecting...")
+                        self._conn_backoff = 0
+                        continue
+                    if _action == "drop":
+                        # Either the retried resume hit the same wall, or the
+                        # server refused the handle outright — the message says
+                        # which, but the action is the same: start clean.
+                        if _is_transient_server_error(e):
+                            print("[JARVIS] 🔗 Resume retried, still failing — "
+                                  "starting a fresh session")
+                        else:
+                            print("[JARVIS] 🔗 Resumption handle rejected — "
+                                  "starting a fresh session")
+                        self.ui.write_log(
+                            "SYS: Could not restore the conversation — starting fresh."
+                        )
+                        self._resume_handle = None
+                        self._conn_backoff = 0
+                        continue
+                    # "keep": the failure says nothing about the handle, so it
+                    # stays and the ladder below decides everything else.
+
+                print(f"[JARVIS] Error ({type(e).__name__}): {err_str}")
                 traceback.print_exc()
 
                 # Out of quota, or this model is not available to this key —
