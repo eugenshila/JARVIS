@@ -36,7 +36,7 @@ export function JarvisConsole({ user, onSignOut }: { user: User; onSignOut: () =
 
       <div className="console-grid">
         <section className="mission-log" aria-labelledby="log-title">
-          <div className="panel-heading"><div><p className="section-index">CHANNEL / PRIMARY</p><h2 id="log-title">Mission log</h2></div><Radio size={17} /></div>
+          <div className="panel-heading"><div><p className="section-index">ADHD / SUPPORT</p><h2 id="log-title">Focus feed</h2></div><Radio size={17} /></div>
           <div className="message-stream" aria-live="polite">
             {live.messages.length === 0 ? (
               <div className="empty-log"><span>Awaiting first instruction</span><p>Speak naturally or type a request. JARVIS will keep the same context across both inputs.</p></div>
@@ -52,7 +52,15 @@ export function JarvisConsole({ user, onSignOut }: { user: User; onSignOut: () =
 
         <section className="command-stage" aria-labelledby="command-title">
           <div className="state-caption"><span className="state-dot" /> LIVE CORE / {live.state}</div>
+          <div className="hud-orbit hud-orbit-left">
+            <div className="hud-card"><span className="hud-label">FOCUS MODE</span><strong>DEEP WORK</strong><small>25 min remaining</small></div>
+            <div className="hud-card"><span className="hud-label">ENERGY</span><strong>OPTIMAL</strong><div className="mini-bars"><i /><i /><i /><i /><i /></div></div>
+          </div>
           <Reactor state={live.state} />
+          <div className="hud-orbit hud-orbit-right">
+            <div className="hud-card"><span className="hud-label">NEXT ACTION</span><strong>One thing at a time</strong><small>Break it into a 5 minute step</small></div>
+            <div className="hud-card"><span className="hud-label">REMINDERS</span><strong>03 ACTIVE</strong><small>Nothing urgent</small></div>
+          </div>
           <div className="voice-caption">
             <h1 id="command-title">{live.state === "SPEAKING" ? "Responding" : live.state === "THINKING" ? "Reasoning" : live.state === "LISTENING" ? "Listening" : live.state === "MUTED" ? "Voice paused" : "Establishing link"}</h1>
             <p>{live.transcript || (live.micActive ? "Microphone is live. Speak when ready." : "Text channel ready. Enable the microphone for voice.")}</p>
