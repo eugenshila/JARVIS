@@ -87,6 +87,8 @@ PLUGIN_SETTINGS = {
         {"key": "min_score", "label": "Queue jobs scoring at least (%)", "type": "number", "default": 40},
         {"key": "max_course_blocks", "label": "Max study blocks per day", "type": "number", "default": 4},
         {"key": "max_job_blocks", "label": "Max job-review blocks per day", "type": "number", "default": 2},
+        {"key": "summary_cache_seconds", "label": "Reuse briefing summaries for (seconds, 0 = always refetch)",
+         "type": "number", "default": 300},
     ],
 }
 
@@ -120,6 +122,47 @@ def _bool(key, default):
     if isinstance(val, str):
         return val.strip().lower() in ("1", "true", "yes", "on")
     return bool(val)
+
+
+# ─────────────────────── briefing summary cache ───────────────────────
+# The eight external briefing sources (Gmail, Outlook, WhatsApp, market,
+# Shilatech, news, marketing, GitHub) are pure reads whose answers do not
+# change meaningfully within a few minutes, yet fetching them — GitHub alone
+# is four REST calls — dominates run_routine()'s wall time. Re-running the
+# routine (a repeated voice command, the autorun racing a manual run, or the
+# test suite exercising it a dozen times) therefore paid the full network
+# cost every time. A short TTL cache keeps one process-local copy; the
+# JAUTOMATIC summary is NOT cached because it reflects the current run's
+# connection state and queue counts. Set `summary_cache_seconds` to 0 to
+# refetch on every run.
+
+_summary_cache: tuple[float, list] | None = None
+_summary_cache_lock = threading.Lock()
+
+
+def _external_summaries() -> list:
+    """Return the eight read-only briefing summaries, reusing a recent fetch."""
+    global _summary_cache
+    ttl = _num("summary_cache_seconds", 300)
+    now = time.monotonic()
+    if ttl > 0:
+        with _summary_cache_lock:
+            if _summary_cache is not None and now - _summary_cache[0] < ttl:
+                return list(_summary_cache[1])
+    summaries = []
+    for fn in (sources.gmail_summary, sources.outlook_summary, sources.whatsapp_summary,
+               sources.market_summary, sources.shilatech_summary,
+               news.kenya_news_summary, news.marketing_advisory, github.github_summary):
+        try:
+            summaries.append(fn())
+        except BlockedAction as e:
+            summaries.append(sources.Summary(fn.__name__, "refused.", degraded=True, note=str(e)[:90]))
+        except Exception as e:
+            summaries.append(sources.Summary(fn.__name__, "failed.", degraded=True, note=str(e)[:90]))
+    if ttl > 0:
+        with _summary_cache_lock:
+            _summary_cache = (now, list(summaries))
+    return summaries
 
 
 # ───────────────────────────── the routine ─────────────────────────────
@@ -202,17 +245,9 @@ def run_routine(min_score: float | None = None, logger=None) -> dict:
     )
     result["plan"] = plan
 
-    # 6 — read-only briefings
-    summaries = []
-    for fn in (sources.gmail_summary, sources.outlook_summary, sources.whatsapp_summary,
-               sources.market_summary, sources.shilatech_summary,
-               news.kenya_news_summary, news.marketing_advisory, github.github_summary):
-        try:
-            summaries.append(fn())
-        except BlockedAction as e:
-            summaries.append(sources.Summary(fn.__name__, "refused.", degraded=True, note=str(e)[:90]))
-        except Exception as e:
-            summaries.append(sources.Summary(fn.__name__, "failed.", degraded=True, note=str(e)[:90]))
+    # 6 — read-only briefings (external sources cached for a few minutes;
+    #     the JAUTOMATIC summary below is always built fresh for this run)
+    summaries = _external_summaries()
     try:
         js = client.summary()
         lines = [f"{k.replace('_', ' ').title()}: {v}" for k, v in js.items() if k != "notes"]
