@@ -392,22 +392,44 @@ TOOL_DECLARATIONS = [
     {
         "name": "jautomatic",
         "description": (
-            "Controls JAUTOMATIC JOB SEARCH through actions matching its tabs: dashboard, profile, "
-            "education, search, applications, sent, archive, tasks, insights, and settings. Use this "
-            "for job searches, match scores, application materials, application tracking, follow-ups, "
-            "job-search analytics, and JAUTOMATIC profile/settings. Never use generic web_search for these."
+            "Controls every JAUTOMATIC JOB SEARCH tab and its shared local data. Use action=navigate "
+            "to visibly open a tab. Search returns job_id values; move selected jobs with "
+            "move_to_applications, or generate their CV/letter/email with prepare. Education lists "
+            "the actual course catalog and can open or track courses. Applications can prepare/open "
+            "materials, update status, and handle follow-ups/interview prep. Tasks controls paid-task "
+            "records. Never substitute generic web_search for JAUTOMATIC operations."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "tab": {"type": "STRING", "enum": ["dashboard", "profile", "education", "search", "applications", "sent", "archive", "tasks", "insights", "settings"]},
-                "action": {"type": "STRING", "description": "Tab action, such as view, update, search, list, prepare, set_status, interview_prep, draft_follow_up, postpone, analytics, export_csv, or export_calendar."},
-                "query": {"type": "STRING", "description": "Job query for the Search tab."},
+                "tab": {"type": "STRING", "enum": ["dashboard", "profile", "search", "tasks", "education", "applications", "sent", "archive", "insights", "settings"]},
+                "action": {
+                    "type": "STRING",
+                    "description": (
+                        "Action for the chosen tab. Common actions: navigate, view, list, search, "
+                        "list_jobs, move_to_applications, prepare, open_job, shortlist, list_courses, "
+                        "open_course, start, complete, add_skills, add_matching, set_status, "
+                        "open_document, interview_prep, draft_follow_up, postpone, recommendations, "
+                        "analytics, update, export_csv, or export_calendar."
+                    )
+                },
+                "show": {"type": "BOOLEAN", "description": "Also focus JAUTOMATIC and display the affected tab. Set true when the user says open, show, go to, or visibly."},
+                "query": {"type": "STRING", "description": "Job-search query, course filter/title, or task filter."},
+                "title": {"type": "STRING", "description": "Job/course title selector when an exact ID was not supplied."},
                 "location": {"type": "STRING", "description": "Optional job location."},
-                "application_id": {"type": "STRING", "description": "Application ID returned by list/search actions."},
-                "status": {"type": "STRING", "description": "New application status."},
-                "note": {"type": "STRING", "description": "Optional status note."},
-                "values": {"type": "OBJECT", "description": "Profile or settings fields to update."},
+                "job_id": {"type": "STRING", "description": "Exact job ID returned by Search."},
+                "job_ids": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Exact job IDs to move, shortlist, or prepare."},
+                "all_results": {"type": "BOOLEAN", "description": "Act on every result from the latest saved search. Use only when the user explicitly says all."},
+                "count": {"type": "INTEGER", "description": "Act on this many top-scoring latest search results."},
+                "min_score": {"type": "INTEGER", "description": "Minimum match score for add_matching."},
+                "application_id": {"type": "STRING", "description": "Exact application ID returned by Applications/Search."},
+                "course_id": {"type": "STRING", "description": "Exact course ID returned by Education list_courses."},
+                "task_id": {"type": "STRING", "description": "Exact paid-task ID returned by Tasks list."},
+                "status": {"type": "STRING", "description": "New application, course, or task status."},
+                "received": {"type": "NUMBER", "description": "Actual amount received when marking a paid task Paid."},
+                "document_kind": {"type": "STRING", "enum": ["cv", "cover_letter", "email", "interview_prep"], "description": "Prepared material to open."},
+                "note": {"type": "STRING", "description": "Status note or application notes."},
+                "values": {"type": "OBJECT", "description": "Fields for profile/settings/task add or update."},
                 "days": {"type": "INTEGER", "description": "Days to postpone a follow-up."},
                 "remote_only": {"type": "BOOLEAN"},
                 "min_salary": {"type": "INTEGER"},
@@ -1794,6 +1816,7 @@ class JarvisLive:
             "computer_settings", "computer_control", "desktop_control", "file_controller",
             "file_processor", "code_helper", "dev_agent", "game_updater",
             "create_presentation", "save_memory", "jarvis_ui_control", "graphics_quality",
+            "jautomatic",
         }
         call_list = list(calls or [])
         if any(getattr(call, "name", "") in mutating for call in call_list):
