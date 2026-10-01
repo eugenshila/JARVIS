@@ -37,6 +37,8 @@ from pathlib import Path
 from plugins import _jmorning_jautomatic as ja
 from plugins import _jmorning_plan as planner
 from plugins import _jmorning_sources as sources
+from plugins import _jmorning_news as news
+from plugins import _jmorning_github as github
 from plugins._jmorning_safety import AUDIT, BlockedAction
 
 NAMESPACE = "jarvis_morning"
@@ -85,6 +87,14 @@ PLUGIN_SETTINGS = {
         {"key": "min_score", "label": "Queue jobs scoring at least (%)", "type": "number", "default": 40},
         {"key": "max_course_blocks", "label": "Max study blocks per day", "type": "number", "default": 4},
         {"key": "max_job_blocks", "label": "Max job-review blocks per day", "type": "number", "default": 2},
+    ],
+}
+
+GITHUB_PLUGIN_SETTINGS = {
+    "namespace": "shilatech_github", "title": "Shilatech GitHub (read-only)",
+    "fields": [
+        {"key": "repo", "label": "Repository", "type": "text", "default": "eugenshila/shilatech"},
+        {"key": "api_token", "label": "Fine-grained read-only PAT", "type": "password", "default": ""},
     ],
 }
 
@@ -195,7 +205,8 @@ def run_routine(min_score: float | None = None, logger=None) -> dict:
     # 6 — read-only briefings
     summaries = []
     for fn in (sources.gmail_summary, sources.outlook_summary, sources.whatsapp_summary,
-               sources.market_summary, sources.shilatech_summary):
+               sources.market_summary, sources.shilatech_summary,
+               news.kenya_news_summary, news.marketing_advisory, github.github_summary):
         try:
             summaries.append(fn())
         except BlockedAction as e:
