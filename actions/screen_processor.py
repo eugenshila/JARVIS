@@ -15,24 +15,51 @@ from pathlib import Path
 
 import numpy as np
 
-try:
-    import cv2
-    _CV2 = True
-except ImportError:
-    _CV2 = False
+# ── Lazy imports for cv2 / mss / PIL ──────────────────────────────────────────
+# main.py imports this module unconditionally at startup (it's where
+# _capture_screen()/_capture_camera() live), so a top-level `import cv2` used
+# to load OpenCV's native libraries into every JARVIS process on every launch
+# — a real, measurable chunk of RAM paid for even in sessions that never touch
+# the camera or screen share. Deferring to first actual use means vision
+# support still "just works" (nothing else in the app needs to know these are
+# lazy), but the cost is only paid by sessions that use it.
+_cv2_mod: "object | None" = False   # False = not attempted yet, None = unavailable
+_mss_mod: "object | None" = False
+_pil_mod: "object | None" = False
 
-try:
-    import mss
-    import mss.tools
-    _MSS = True
-except ImportError:
-    _MSS = False
 
-try:
-    import PIL.Image
-    _PIL = True
-except ImportError:
-    _PIL = False
+def _cv2():
+    global _cv2_mod
+    if _cv2_mod is False:
+        try:
+            import cv2 as _cv2_import
+            _cv2_mod = _cv2_import
+        except ImportError:
+            _cv2_mod = None
+    return _cv2_mod
+
+
+def _mss():
+    global _mss_mod
+    if _mss_mod is False:
+        try:
+            import mss as _mss_import
+            import mss.tools  # noqa: F401 — attaches .tools to the mss module
+            _mss_mod = _mss_import
+        except ImportError:
+            _mss_mod = None
+    return _mss_mod
+
+
+def _pil_image():
+    global _pil_mod
+    if _pil_mod is False:
+        try:
+            import PIL.Image as _pil_import
+            _pil_mod = _pil_import
+        except ImportError:
+            _pil_mod = None
+    return _pil_mod
 
 
 def _base_dir() -> Path:
@@ -71,12 +98,13 @@ _JPEG_Q    = 82
 
 
 def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]:
-    if not _PIL:
+    pil_image = _pil_image()
+    if not pil_image:
         return img_bytes, f"image/{source_format.lower()}"
 
     try:
-        img = PIL.Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        img.thumbnail((_IMG_MAX_W, _IMG_MAX_H), PIL.Image.BILINEAR)
+        img = pil_image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img.thumbnail((_IMG_MAX_W, _IMG_MAX_H), pil_image.BILINEAR)
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=_JPEG_Q, optimize=False)
         return buf.getvalue(), "image/jpeg"
@@ -87,21 +115,23 @@ def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]
 
 def _capture_screen() -> tuple[bytes, str]:
 
-    if not _MSS:
+    mss_mod = _mss()
+    if not mss_mod:
         raise RuntimeError("mss is not installed. Run: pip install mss")
 
-    with mss.mss() as sct:
+    with mss_mod.mss() as sct:
         monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
         target   = monitors[1] if len(monitors) > 1 else monitors[0]
         shot     = sct.grab(target)
-        png      = mss.tools.to_png(shot.rgb, shot.size)
+        png      = mss_mod.tools.to_png(shot.rgb, shot.size)
 
     return _compress(png, "PNG")
 
 
 def _cv2_backend() -> int:
     """Return the best OpenCV camera backend for the current OS."""
-    if not _CV2:
+    cv2 = _cv2()
+    if not cv2:
         return 0
     os_name = _get_os()
     if os_name == "windows":
@@ -113,7 +143,8 @@ def _cv2_backend() -> int:
 
 def _probe_camera(index: int, backend: int, warmup: int = 5) -> bool:
 
-    if not _CV2:
+    cv2 = _cv2()
+    if not cv2:
         return False
     cap = cv2.VideoCapture(index, backend)
     if not cap.isOpened():
@@ -152,7 +183,8 @@ def _get_camera_index() -> int:
 
 
 def _capture_camera() -> tuple[bytes, str]:
-    if not _CV2:
+    cv2 = _cv2()
+    if not cv2:
         raise RuntimeError("OpenCV (cv2) is not installed. Run: pip install opencv-python")
 
     index   = _get_camera_index()
@@ -171,10 +203,11 @@ def _capture_camera() -> tuple[bytes, str]:
     if not ret or frame is None:
         raise RuntimeError("Camera returned no frame.")
 
-    if _PIL:
+    pil_image = _pil_image()
+    if pil_image:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = PIL.Image.fromarray(rgb)
-        img.thumbnail((_IMG_MAX_W, _IMG_MAX_H), PIL.Image.BILINEAR)
+        img = pil_image.fromarray(rgb)
+        img.thumbnail((_IMG_MAX_W, _IMG_MAX_H), pil_image.BILINEAR)
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=_JPEG_Q)
         return buf.getvalue(), "image/jpeg"

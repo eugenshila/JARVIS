@@ -22,6 +22,7 @@ _DEPS_OK = False
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
     from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+    from fastapi.staticfiles import StaticFiles
     import uvicorn
     _DEPS_OK = True
 except ImportError:
@@ -37,6 +38,7 @@ except Exception:
 
 BASE_DIR    = Path(__file__).resolve().parent.parent
 STATIC_DIR  = Path(__file__).parent / "static"
+ICONS_DIR   = STATIC_DIR / "icons"
 PORT        = 8000
 MAX_UPLOAD_MB = 500
 
@@ -550,6 +552,31 @@ class DashboardServer:
                                     media_type="application/javascript")
             from fastapi.responses import RedirectResponse
             return RedirectResponse(_CRYPTOJS_CDN)
+
+        # ── PWA: installable home-screen app ──────────────────────────────
+        # Manifest + icons + service worker are what let a phone/desktop
+        # browser offer "Add to Home Screen" / "Install app" and then open
+        # the dashboard full-screen like a native app. None of this changes
+        # what the app does — JARVIS still has to be reachable over the
+        # network for anything to actually work.
+        if ICONS_DIR.is_dir():
+            app.mount("/static/icons", StaticFiles(directory=str(ICONS_DIR)), name="icons")
+
+        @app.get("/manifest.json")
+        async def serve_manifest():
+            return FileResponse(str(STATIC_DIR / "manifest.json"),
+                                media_type="application/manifest+json")
+
+        @app.get("/sw.js")
+        async def serve_service_worker():
+            # Served from the root (not /static/) so its default scope covers
+            # the whole origin — a service worker can only control paths at or
+            # below the directory it's served from.
+            return FileResponse(
+                str(STATIC_DIR / "sw.js"),
+                media_type="application/javascript",
+                headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+            )
 
         @app.get("/login", response_class=HTMLResponse)
         async def login_page():

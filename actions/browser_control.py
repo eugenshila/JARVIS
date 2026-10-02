@@ -10,15 +10,34 @@ import subprocess
 import threading
 import webbrowser
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from playwright.async_api import (
-    async_playwright,
-    BrowserContext,
-    Page,
-    Playwright,
-    TimeoutError as PlaywrightTimeout,
-)
+if TYPE_CHECKING:
+    # Only needed for type hints — `from __future__ import annotations` (above)
+    # means these are never evaluated at runtime, so this costs nothing.
+    from playwright.async_api import BrowserContext, Page, Playwright
+
+# ── Lazy Playwright import ────────────────────────────────────────────────────
+# Playwright (plus the Chromium/driver plumbing it pulls in) is only needed if
+# the user actually asks JARVIS to drive a browser. Every other actions/*.py
+# file already imports its heavy, optional dependency inside a function — this
+# follows the same convention so a fresh launch that never touches browser
+# control doesn't pay for Playwright's import at all. Populated once by
+# _ensure_playwright_imported(), called before any browser session starts.
+async_playwright  = None   # type: ignore[assignment]
+PlaywrightTimeout = Exception  # placeholder; replaced with the real type below
+
+
+def _ensure_playwright_imported() -> None:
+    global async_playwright, PlaywrightTimeout
+    if async_playwright is not None:
+        return
+    from playwright.async_api import async_playwright as _async_playwright
+    from playwright.async_api import TimeoutError as _PlaywrightTimeout
+    async_playwright  = _async_playwright
+    PlaywrightTimeout = _PlaywrightTimeout
+
+
 _OS = platform.system()   # "Windows" | "Darwin" | "Linux"
 
 def _normalize_url(url: str) -> str:
@@ -448,6 +467,7 @@ class _BrowserSession:
     """
 
     def __init__(self, browser_name: str):
+        _ensure_playwright_imported()   # first real use — pulls in Playwright now
         self.browser_name = browser_name
         self._spec        = _resolve_browser(browser_name)
 
